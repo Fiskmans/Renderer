@@ -7,7 +7,7 @@
 #include <d3dcompiler.h>
 #include <random>
 
-RaytracerOutputViewer::RaytracerOutputViewer(fisk::GraphicsFramework& aFramework, Raytracer::TextureType& aTexture, fisk::tools::V2ui aWindowSize)
+RaytracerOutputViewer::RaytracerOutputViewer(fisk::GraphicsFramework& aFramework, TextureType& aTexture, fisk::tools::V2ui aWindowSize)
 	: myFramework(aFramework)
 	, myPixelShader(nullptr)
 	, myTexture(nullptr)
@@ -104,7 +104,7 @@ void RaytracerOutputViewer::Imgui()
 		if ((!ImGui::IsItemFocused() || ImGui::IsKeyDown(ImGuiKey_Enter)) && nanos != myTimescale.count())
 		{
 			if (nanos > 1)
-				myTimescale = Raytracer::CompactNanoSecond(nanos);
+				myTimescale = CompactNanoSecond(nanos);
 
 			FlushImage(true);
 		}
@@ -214,7 +214,7 @@ void RaytracerOutputViewer::FlushImage(bool aRestart)
 			};
 		};
 
-		auto timeMutator = [this](const Raytracer::CompactNanoSecond& aTime) -> fisk::tools::V3f
+		auto timeMutator = [this](const CompactNanoSecond& aTime) -> fisk::tools::V3f
 		{
 			float v = static_cast<float>(aTime.count()) / static_cast<float>(myTimescale.count());
 
@@ -224,27 +224,6 @@ void RaytracerOutputViewer::FlushImage(bool aRestart)
 		auto idMutator = [this](unsigned int aObjectId) -> fisk::tools::V3f
 		{
 			return ObjectIdToColor(aObjectId);
-		};
-
-		auto samplesMutator = [this](unsigned int aSamples) -> fisk::tools::V3f
-		{
-			float v = static_cast<float>(aSamples) / static_cast<float>(32);
-
-			return MonoChannelColor(v);
-		};
-
-		auto varianceMutator = [this](const fisk::tools::V3f& aVarianceAggregate, unsigned int aSamples) -> fisk::tools::V3f
-		{
-			fisk::tools::V3f variance = aVarianceAggregate / aSamples;
-
-			return { std::sqrt(variance[0]), std::sqrt(variance[1]) , std::sqrt(variance[2]) };
-		};
-
-		auto expectedChangeMutator = [this](const fisk::tools::V3f& aVarianceAggregate, unsigned int aSamples) -> fisk::tools::V3f
-		{
-			float expectedChange = Raytracer::ExpectedChange(aVarianceAggregate, aSamples);
-
-			return MonoChannelColor(expectedChange * 50.f);
 		};
 
 		switch (myChannel)

@@ -3,7 +3,7 @@
 
 #include "tools/MathVector.h"
 
-#include "Shapes.h"
+#include "tools/Shapes.h"
 
 #include "IRenderer.h"
 

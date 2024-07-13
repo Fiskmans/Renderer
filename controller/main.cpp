@@ -5,12 +5,15 @@
 #include <thread>
 #include <chrono>
 
-#include "Window.h"
+#include "Camera.h"
 #include "GraphicsFramework.h"
 #include "ImguiHelper.h"
-#include "Raytracer.h"
+#include "Orchestrator.h"
+#include "RayRenderer.h"
 #include "RaytracerOutputViewer.h"
 #include "Scene.h"
+#include "ThreadedRenderer.h"
+#include "Window.h"
 #include "intersectors/DumbIntersector.h"
 
 #include "tools/Logger.h"
@@ -40,7 +43,6 @@ int main(int argc, char** argv)
 	fisk::tools::SetColor(fisk::tools::AnyError, FOREGROUND_RED);
 
 	fisk::tools::SetHalting(fisk::tools::AnyError);
-
 
 	fisk::Window window;
 
@@ -148,16 +150,26 @@ int main(int argc, char** argv)
 
 	DumbIntersector dumbIntersector(scene);
 
-	Raytracer tracer(window.GetWindowSize(), camera, dumbIntersector, skyBox, 0.002f, scaleFactor, (std::max)(std::thread::hardware_concurrency() - 2u, 1u));
+	RayRenderer baseRenderer(camera, dumbIntersector, skyBox, 1000);
 
-	RaytracerOutputViewer viewer(framework, tracer.GetTexture(), window.GetWindowSize());
+	std::vector<IAsyncRenderer<TextureType::PackedValues>*> renderers;
 
-	fisk::tools::EventReg tracerImguiHandle = imguiHelper.DrawImgui.Register([&tracer](){ tracer.Imgui(); });
+	for (size_t i = 0; i < (std::max)(static_cast<int>(std::thread::hardware_concurrency()) - 2, 4); i++)
+	{
+		renderers.push_back(new ThreadedRenderer<TextureType::PackedValues, 16>(baseRenderer));
+	}
+
+	TextureType texture(window.GetWindowSize() / scaleFactor, {});
+	Orchestrator<TextureType> orcherstrator(texture, renderers);
+
+	RaytracerOutputViewer viewer(framework, texture, window.GetWindowSize());
+	
 	fisk::tools::EventReg viewerImguiHandle = imguiHelper.DrawImgui.Register([&viewer](){ viewer.Imgui(); });
 	fisk::tools::EventReg flushHandle = framework.AfterPresent.Register([&viewer](){ viewer.DrawImage(); });
 
 	while (window.ProcessEvents())
 	{
+		orcherstrator.Update(); // TODO: finnish
 		framework.Present(fisk::GraphicsFramework::VSyncState::OnVerticalBlank);
 	}
 }

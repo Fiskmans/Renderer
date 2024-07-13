@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "Shapes.h"
+#include "tools/Shapes.h"
 #include "Material.h"
 
 template<class Shape>

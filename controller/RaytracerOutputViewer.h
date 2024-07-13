@@ -3,7 +3,7 @@
 #include "ConvertVector.h"
 
 #include "GraphicsFramework.h"
-#include "Raytracer.h"
+#include "RendererTypes.h"
 
 #include "COMObject.h"
 
@@ -14,7 +14,7 @@
 class RaytracerOutputViewer
 {
 public:
-	RaytracerOutputViewer(fisk::GraphicsFramework& aFramework, Raytracer::TextureType& aTexture, fisk::tools::V2ui aWindowSize);
+	RaytracerOutputViewer(fisk::GraphicsFramework& aFramework, TextureType& aTexture, fisk::tools::V2ui aWindowSize);
 
 	void DrawImage();
 	void Imgui();
@@ -43,7 +43,7 @@ private:
 	fisk::COMObject<ID3D11ShaderResourceView> myTextureView;
 	fisk::COMObject<ID3D11InputLayout> myInputLayout;
 
-	Raytracer::TextureType& myTextureData;
+	TextureType& myTextureData;
 	fisk::tools::V2ui myWindowSize;
 
 	std::vector<fisk::tools::V3f> myFrameBuffer;
@@ -54,5 +54,5 @@ private:
 
 	Channel myChannel;
 
-	Raytracer::CompactNanoSecond myTimescale;
+	CompactNanoSecond myTimescale;
 };

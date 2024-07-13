@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tools/MathVector.h"
-#include "Shapes.h"
+#include "tools/Shapes.h"
 #include "Hit.h"
 
 class Material
