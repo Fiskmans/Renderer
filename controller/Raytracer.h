@@ -1,13 +1,13 @@
 #pragma once
 
 #include "tools/MathVector.h"
+#include "tools/Iterators.h"
 #include "Shapes.h"
 
 #include "GraphicsFramework.h"
 
 #include "MultichannelTexture.h"
 #include "IIntersector.h"
-#include "RegionJob.h"
 #include "Camera.h"
 #include "Sky.h"
 
@@ -26,21 +26,18 @@ class Raytracer
 {
 public:
 	using CompactNanoSecond = std::chrono::duration<float, std::nano>;
+	using RayCaster = IRenderer<fisk::tools::Ray<float, 3>>;
 
 	using TextureType = MultiChannelTexture<
 		fisk::tools::V3f,	// Color
 		CompactNanoSecond,	// Time taken
-		unsigned int,		// ObjectId
-		unsigned int,		// Samples
-		fisk::tools::V3f>;	// VarianceAggregate
+		unsigned int>;		// ObjectId>
 
 	static constexpr size_t ColorChannel = 0;
 	static constexpr size_t TimeChannel = 1;
 	static constexpr size_t ObjectIdChannel = 2;
-	static constexpr size_t SamplesChannel = 3;
-	static constexpr size_t VarianceAggregateChannel = 4;
 
-	Raytracer(fisk::tools::V2ui aSize, IRenderer<fisk::tools::Ray<float, 3>>& aRayCaster, IIntersector& aIntersector, Sky& aSky, float aAllowableNoise, unsigned int aPixelsPerTexel, size_t aWorkerThreads);
+	Raytracer(fisk::tools::V2ui aSize, RayCaster& aRayCaster, IIntersector& aIntersector, Sky& aSky, float aAllowableNoise, unsigned int aPixelsPerTexel, size_t aWorkerThreads);
 	~Raytracer();
 
 	Raytracer(Raytracer&) = delete;
@@ -55,25 +52,28 @@ public:
 
 private:
 
-	struct RayJob
+	enum class RayState : uint8_t
 	{
-		fisk::tools::Ray<float, 3> myRay;
-		unsigned int myFirstObject;
-		unsigned int myBounces;
-
-		fisk::tools::V3f myColor;
-		fisk::tools::V2ui myOriginTexel;
-
-		CompactNanoSecond myTimeSpent;
+		Empty,
+		Working,
+		Done
 	};
 
-	class WorkerThread
+	struct RayJob
+	{
+		fisk::tools::V2ui myUV;
+		TextureType::PackedValues myResult;
+
+		std::atomic<RayState> myState;
+	};
+
+	class WorkerThread : public IAsyncRenderer<TextureType::PackedValues>
 	{
 	public:
-		constexpr static size_t SampleQueueSize = 512;
-		constexpr static size_t SampleEnqueueBatchSize = SampleQueueSize / 2;
+		constexpr static size_t SampleQueueSize = 16;
+		constexpr static size_t MaxBounces = 16;
 		
-		WorkerThread(IIntersector& aIntersector, Sky& aSky);
+		WorkerThread(RayCaster& aRaycaster, IIntersector& aIntersector, Sky& aSky, size_t aSamplesPerTexel);
 		~WorkerThread();
 
 		WorkerThread(WorkerThread&) = delete;
@@ -85,36 +85,41 @@ private:
 
 		void Imgui();
 
-		bool TryQueue(RayJob aJob);
-		bool TryRetrieve(RayJob& aOutJob);
+		bool CanRender() override;
 
-		bool IsWorking();
+		void Render(fisk::tools::V2ui aUV) override;
+		bool GetResult(Result& aOut) override;
+
+		size_t GetPending() override;
 
 	private:
 
-		void Run();
-
-		bool StepRay(std::atomic<RayJob>& aJob);
-
-		bool CalculateNextRay(RayJob& aInOutJob);
-		
-		enum class State : uint8_t
+		struct Sample
 		{
-			Empty,
-			Working,
-			Done
+			fisk::tools::V3f myColor{ 1, 1, 1 };
+			unsigned int myObjectId = 0;
 		};
 
-		IIntersector& myIntersector; // Shared
-		Sky& mySky; // Shared
+		void Run();
 
-		size_t myWriteHead; // External thread
-		size_t myReadHead; // External thread
+		TextureType::PackedValues RenderTexel(fisk::tools::V2ui aUV); // TODO: Extract this into a IRenderer instead of baking it into the thread construct
+		Sample SampleTexel(fisk::tools::V2ui aUV);
 
-		std::thread myThread; // External thread
+		RayCaster& myRayCaster;			// Shared
+		IIntersector& myIntersector;	// Shared
+		Sky& mySky;						// Shared
+		size_t mySamplesPerTexel;		// Shared
 
-		std::atomic<RayJob> myRays[SampleQueueSize]; // Shared
-		std::atomic<State> myStates[SampleQueueSize]; // Shared
+
+		std::thread myThread;	// External thread
+		size_t myPending;
+
+		RayJob myRays[SampleQueueSize]; // Shared
+
+		fisk::tools::LoopingPointer<RayJob> myWriteHead; // External thread
+		fisk::tools::LoopingPointer<RayJob> myReadHead; // External thread
+
+		fisk::tools::LoopingPointer<RayJob> myRenderHead; // Internal thread
 
 		std::atomic<bool> myStopRequested; // Shared
 	};
@@ -122,17 +127,6 @@ private:
 	void Setup();
 
 	void Run();
-
-	void QueueRegion(const RegionJob& aJob);
-
-	RayJob CurrentRay();
-	void EnqueueTexels();
-	bool NextSample();
-
-	void FindMoreWork();
-	void QueueTexels(const std::vector<fisk::tools::V2ui>& aTexels, size_t aSamplesPerPixel, size_t aExpansion, std::string aName);
-
-	void MergeOuput();
 
 	IRenderer<fisk::tools::Ray<float, 3>>& myRayCaster;
 	IIntersector& myIntersector;
@@ -149,7 +143,6 @@ private:
 
 	std::thread myOrchistratorThread;
 	std::recursive_mutex myOrchistratorMutex;
-	std::vector<RegionJob> myRegionJobs;
 	bool myIsDone;
 	std::atomic<bool> myStopRequested;
 };

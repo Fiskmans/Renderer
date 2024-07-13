@@ -13,7 +13,7 @@ list(APPEND FILES Camera.h Camera.cpp)
 list(APPEND FILES Material.h Material.cpp)
 list(APPEND FILES Raytracer.h Raytracer.cpp)
 list(APPEND FILES RaytracerOutputViewer.h RaytracerOutputViewer.cpp)
-list(APPEND FILES RegionJob.h RegionJob.cpp)
+list(APPEND FILES RegionGenerator.h RegionGenerator.cpp)
 list(APPEND FILES Scene.h Scene.cpp)
 list(APPEND FILES Sky.h Sky.cpp)
 

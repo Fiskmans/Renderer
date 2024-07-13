@@ -32,10 +32,7 @@ private:
 	{
 		Color,
 		TimeTaken,
-		Object,
-		NumberOfSamples,
-		Variance,
-		ExpectedChange
+		Object
 	};
 
 	fisk::GraphicsFramework& myFramework;

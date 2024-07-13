@@ -6,6 +6,7 @@
 #include "tools/Iterators.h"
 #include "ConvertVector.h"
 #include "PartitionBy.h"
+#include "RegionGenerator.h"
 
 #include <random>
 
@@ -57,8 +58,6 @@ Raytracer::Raytracer(fisk::tools::V2ui aSize, IRenderer<fisk::tools::Ray<float, 
 			{ 0, 0, 0 },
 			std::chrono::nanoseconds(0),
 			0,
-			0,
-			{0,0,0}
 		})
 	, myThreads(nullptr)
 	, mythreadCount(aWorkerThreads)
@@ -69,7 +68,7 @@ Raytracer::Raytracer(fisk::tools::V2ui aSize, IRenderer<fisk::tools::Ray<float, 
 	myThreads = static_cast<WorkerThread*>(::malloc(sizeof(WorkerThread) * mythreadCount));
 
 	for (WorkerThread& thread : fisk::tools::RangeFromStartEnd(myThreads, myThreads + mythreadCount))
-		new (&thread) WorkerThread(myIntersector, mySky);
+		new (&thread) WorkerThread(myRayCaster, myIntersector, mySky, 10000);
 
 	Setup();
 }
@@ -94,34 +93,6 @@ Raytracer::TextureType& Raytracer::GetTexture()
 void Raytracer::Imgui()
 {	
 	using namespace std::chrono_literals;
-
-	ImGui::SetNextWindowPos({ 0, 0 });
-	ImGui::SetNextWindowSize({ static_cast<float>(myTextureData.GetSize()[0] * myPixelsPerTexel), static_cast<float>(myTextureData.GetSize()[1] * myPixelsPerTexel) });
-	ImGui::Begin("Region jobs overlay", 0, ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMouseInputs);
-	
-	ImDrawList* drawlist = ImGui::GetWindowDrawList();
-	
-	if (TimedLockGuard lock{ myOrchistratorMutex, 5ms })
-	{
-		for (RegionJob& job : myRegionJobs)
-		{
-			fisk::tools::V2ui rawTopLeft = job.GetTopLeft();
-			fisk::tools::V2ui rawBottomRight = job.GetBottomRight();
-
-			ImVec2 topLeft{static_cast<float>(rawTopLeft[0] * myPixelsPerTexel), static_cast<float>(rawTopLeft[1] * myPixelsPerTexel) };
-			ImVec2 bottomRight{ static_cast<float>(rawBottomRight[0] * myPixelsPerTexel), static_cast<float>(rawBottomRight[1] * myPixelsPerTexel) };
-
-			ImColor color = ImColor(128, 0, 0, 255);
-
-			if (&job== &myRegionJobs[0])
-				color = ImColor(0, 128, 0, 255);
-
-			drawlist->AddRect(topLeft, bottomRight, color);
-			drawlist->AddText(topLeft, color, (" " + job.GetName()).c_str());
-		}
-	}
-
-	ImGui::End();
 	
 	ImGui::Begin("Tracer");
 
@@ -161,38 +132,7 @@ void Raytracer::Imgui()
 		}
 	}
 
-	if (ImGui::CollapsingHeader("Job regions", ImGuiTreeNodeFlags_DefaultOpen))
-	{
-		if (TimedLockGuard lock{myOrchistratorMutex, 5ms})
-		{
-			for (RegionJob& job : myRegionJobs)
-			{
-				ImGui::Separator();
-				job.Imgui();
-			}
-		}
-		else
-		{
-			ImGui::Text("Resource busy");
-		}
-	}
-
 	ImGui::End();
-}
-
-void Raytracer::QueueRegion(const RegionJob& aJob)
-{
-	assert(aJob.GetTopLeft()[0] >= 0);
-	assert(aJob.GetTopLeft()[1] >= 0);
-	assert(aJob.GetBottomRight()[0] <= mySize[0]);
-	assert(aJob.GetBottomRight()[1] <= mySize[0]);
-
-	{
-		std::lock_guard lock(myOrchistratorMutex);
-			myRegionJobs.emplace_back(aJob);
-	}
-
-	myIsDone = false;
 }
 
 float Raytracer::ExpectedChange(fisk::tools::V3f aVarianceAggregate, unsigned int aSamples)
@@ -230,8 +170,6 @@ void Raytracer::Setup()
 					{ dist(rng), dist(rng), dist(rng)},
 					std::chrono::nanoseconds(0),
 					0,
-					0,
-					{ 0,0,0 }
 				});
 		}
 	}
@@ -242,302 +180,51 @@ void Raytracer::Setup()
 
 void Raytracer::Run()
 {
-	QueueRegion(RegionJob(fisk::tools::V2ui{ 0, 0 }, mySize, 1, "Scratch pass"));
-	QueueRegion(RegionJob(fisk::tools::V2ui{ 0, 0 }, mySize, 2, "Scratch improvement"));
-	QueueRegion(RegionJob(fisk::tools::V2ui{ 0, 0 }, mySize, 1000, "Finalize"));
+	RegionGenerator generator(mySize);
+
 
 	using namespace std::chrono_literals;
 
 	while (!myStopRequested.load(std::memory_order::acquire))
 	{
-		try
-		{
-			MergeOuput();
-			EnqueueTexels();
+		bool hasPending = false;
 
-			std::this_thread::yield();
-		}
-		catch (const DoneException&)
+		for (WorkerThread& thread : fisk::tools::RangeFromStartEnd(myThreads, myThreads + mythreadCount))
 		{
+			while (thread.CanRender())
+			{
+				thread.Render(generator.Get());
+
+				if (!generator.Next())
+				{
+					myIsDone = true;
+					return;
+				}
+			}
+
+			WorkerThread::Result result;
+			while (thread.GetResult(result))
+				myTextureData.SetTexel(std::get<0>(result), std::get<1>(result));
+
+			if (thread.GetPending() > 0)
+				hasPending = true;
+		}
+
+		if (myIsDone && !hasPending)
 			break;
-		}
 	}
 }
 
-Raytracer::RayJob Raytracer::CurrentRay()
-{
-	assert(!myRegionJobs.empty());
-
-	using namespace std::chrono_literals;
-
-	fisk::tools::V2ui at = myRegionJobs.front().Get();
-
-	RayJob job;
-
-	job.myColor = { 1, 1, 1 };
-	job.myOriginTexel = at;
-
-	job.myRay = myRayCaster.Render(at);
-
-	job.myBounces = 0;
-	job.myFirstObject = 0;
-	job.myTimeSpent = 0ns;
-
-	return job;
-}
-
-void Raytracer::EnqueueTexels()
-{
-	std::lock_guard lock(myOrchistratorMutex);
-	if (myIsDone)
-	{
-		FindMoreWork();
-		return;
-	}
-
-	for (WorkerThread& thread : fisk::tools::RangeFromStartEnd(myThreads, myThreads + mythreadCount))
-	{
-		for (size_t i = 0; i < WorkerThread::SampleEnqueueBatchSize; i++)
-		{
-			if (!thread.TryQueue(CurrentRay()))
-				break;
-
-			if (!NextSample())
-			{
-				myIsDone = true;
-				return;
-			}
-		}
-	}
-}
-
-bool Raytracer::NextSample()
-{
-	while (!myRegionJobs.empty())
-	{
-		if (myRegionJobs.front().Next())
-			return true;
-
-		myRegionJobs.erase(myRegionJobs.begin());
-	}
-
-	return false;
-}
-
-void Raytracer::FindMoreWork()
-{
-	constexpr size_t WorstAmount = 512;
-
-	for (WorkerThread& thread : fisk::tools::RangeFromStartEnd(myThreads, myThreads + mythreadCount))
-		if (thread.IsWorking())
-			return;
-
-	struct SortableTexelChange
-	{
-		float myExpectedChange;
-		fisk::tools::V2ui myUV;
-
-		auto operator < (const SortableTexelChange& aOther) const
-		{
-			return myExpectedChange > aOther.myExpectedChange;
-		}
-	};
-
-	const std::vector<fisk::tools::V3f>& varianceAggregates = myTextureData.Channel<VarianceAggregateChannel>();
-	const std::vector<unsigned int>& samples = myTextureData.Channel<SamplesChannel>();
-
-	std::vector<SortableTexelChange> texels;
-
-	texels.resize(samples.size());
-
-	for (unsigned int x = 0; x < mySize[0]; x++)
-	{
-		for (unsigned int y = 0; y < mySize[1]; y++)
-		{
-			size_t index = x + y * mySize[0];
-
-			SortableTexelChange& texel = texels[index];
-
-			texel.myExpectedChange = ExpectedChange(varianceAggregates[index], samples[index]);
-			texel.myUV = { x, y };
-		}
-	}
-
-	std::this_thread::sleep_for(std::chrono::seconds(5));
-
-	std::sort(texels.begin(), texels.end());
-
-	if (texels[0].myExpectedChange < myAllowableNoise)
-		throw DoneException("Were done, woo");
-
-	assert(texels.size() > WorstAmount);
-
-	texels.resize(WorstAmount);
-
-	std::vector<fisk::tools::V2ui> justPositions;
-
-	justPositions.reserve(WorstAmount);
-
-	for (SortableTexelChange& texel : texels)
-		justPositions.push_back(texel.myUV);
-
-	size_t spp = 1;
-	size_t size = 128;
-	size_t precision = 1;
-
-	while (!justPositions.empty())
-	{
-		QueueTexels(justPositions, spp,  size, "Precision " + std::to_string(precision));
-
-		if (size == 0)
-			break;
-
-		spp *= 2;
-		size /= 2;
-		precision++;
-
-		justPositions.resize(justPositions.size() / 2);
-	}
-
-	//throw std::exception("plix stop");
-}
-
-void Raytracer::QueueTexels(const std::vector<fisk::tools::V2ui>& aTexels, size_t aSamplesPerPixel, size_t aExpansion, std::string aName)
-{
-	std::vector<fisk::tools::V2ui> texels = aTexels;
-
-	std::sort(texels.begin(), texels.end(), [](const fisk::tools::V2ui& aLeft, const fisk::tools::V2ui& aRight)
-	{
-		return aLeft[0] < aRight[0];
-	});
-
-	std::vector<std::vector<fisk::tools::V2ui>> xPartitions = PartitionBy<fisk::tools::V2ui>(texels, [aExpansion](const fisk::tools::V2ui& aLeft, const fisk::tools::V2ui& aRight)
-	{
-		return aLeft[0] + aExpansion * 2 < aRight[0];
-	});
-
-	std::vector<std::vector<std::vector<fisk::tools::V2ui>>> xyPartitions;
-
-	for (auto& xPartition : xPartitions)
-	{
-
-		std::sort(xPartition.begin(), xPartition.end(), [](const fisk::tools::V2ui& aLeft, const fisk::tools::V2ui& aRight)
-		{
-			return aLeft[1] < aRight[1];
-		});
-
-		xyPartitions.push_back(PartitionBy<fisk::tools::V2ui>(xPartition, [aExpansion](const fisk::tools::V2ui& aLeft, const fisk::tools::V2ui& aRight)
-		{
-			return aLeft[1] + aExpansion * 2 < aRight[1];
-		}));
-	}
-
-	struct BoundingBox
-	{
-		fisk::tools::V2ui topLeft = { std::numeric_limits<unsigned int>::max(), std::numeric_limits<unsigned int>::max() };
-		fisk::tools::V2ui bottomRight = { 0, 0 };
-
-		void Include(fisk::tools::V2ui aUV)
-		{
-			topLeft[0] = std::min(aUV[0], topLeft[0]);
-			topLeft[1] = std::min(aUV[1], topLeft[1]);
-
-			bottomRight[0] = std::max(aUV[0] + 1, bottomRight[0]);
-			bottomRight[1] = std::max(aUV[1] + 1, bottomRight[1]);
-		}
-
-		BoundingBox Expand(unsigned int aAmount, fisk::tools::V2ui aMax) const
-		{
-			BoundingBox copy(*this);
-
-			copy.topLeft -= { copy.topLeft[0] > aAmount ? aAmount : copy.topLeft[0], copy.topLeft[1] > aAmount ? aAmount : copy.topLeft[1] };
-			copy.bottomRight += { aAmount, aAmount };
-
-			copy.bottomRight[0] = std::min(aMax[0], copy.bottomRight[0]);
-			copy.bottomRight[1] = std::min(aMax[1], copy.bottomRight[1]);
-
-			return copy;
-		}
-	};
-
-	std::vector<BoundingBox> boundingBoxes;
-
-	for (auto& xyPart : xyPartitions)
-	{
-		for (auto& yPart : xyPart)
-		{
-			BoundingBox bb;
-
-			for (fisk::tools::V2ui& texel : yPart)
-				bb.Include(texel);
-
-			boundingBoxes.push_back(bb);
-		}
-	}
-
-	for (const BoundingBox& boundingBox : boundingBoxes)
-	{
-		{
-			BoundingBox bb = boundingBox.Expand(aExpansion, mySize);
-			QueueRegion(RegionJob(bb.topLeft, bb.bottomRight, aSamplesPerPixel, aName));
-		}
-	}
-}
-
-void Raytracer::MergeOuput()
-{
-	for (WorkerThread& thread : fisk::tools::RangeFromStartEnd(myThreads, myThreads + mythreadCount))
-	{
-		RayJob ray;
-		while (thread.TryRetrieve(ray))
-		{
-			TextureType::PackedValues old = myTextureData.GetTexel(ray.myOriginTexel);
-
-			fisk::tools::V3f normalizedColor = ray.myColor;
-
-			if (std::get<SamplesChannel>(old) == 0)
-			{
-				myTextureData.SetTexel(
-					ray.myOriginTexel,
-					{
-						normalizedColor,
-						ray.myTimeSpent,
-						ray.myFirstObject,
-						1,
-					{ 0, 0, 0 }
-					});
-			}
-			else
-			{
-				auto& [color, timeSpent, firstObject, samples, variance] = old;
-
-				float blendFactor = static_cast<float>(samples) / static_cast<float>(samples + 1);
-				timeSpent = timeSpent * blendFactor + ray.myTimeSpent * (1.f - blendFactor);
-
-				// Welford's online algorithm
-				samples++;
-				fisk::tools::V3f delta = normalizedColor - color;
-				color += delta / samples;
-				fisk::tools::V3f delta2 = normalizedColor - color;
-
-				variance += delta * delta2;
-
-				myTextureData.SetTexel(ray.myOriginTexel, old);
-			}
-		}
-
-		std::atomic_thread_fence(std::memory_order::memory_order_release);
-	}
-}
-
-
-Raytracer::WorkerThread::WorkerThread(IIntersector& aIntersector, Sky& aSky)
-	: myIntersector(aIntersector)
+Raytracer::WorkerThread::WorkerThread(RayCaster& aRaycaster, IIntersector& aIntersector, Sky& aSky, size_t aSamplesPerTexel)
+	: myRayCaster(aRaycaster)
+	, myIntersector(aIntersector)
 	, mySky(aSky)
+	, mySamplesPerTexel(aSamplesPerTexel)
+	, myPending(0)
 	, myStopRequested(false)
-	, myStates{State::Empty}
-	, myReadHead(0)
-	, myWriteHead(0)
+	, myReadHead(myRays, SampleQueueSize)
+	, myWriteHead(myRays, SampleQueueSize)
+	, myRenderHead(myRays, SampleQueueSize)
 {
 	myThread = std::move(std::thread(std::bind(&Raytracer::WorkerThread::Run, this)));
 }
@@ -592,15 +279,17 @@ void Raytracer::WorkerThread::Imgui()
 
 		ImColor color;
 
-		switch (myStates[i].load(std::memory_order::relaxed))
+		RayState ray = myRays[i].myState.load(std::memory_order::relaxed);
+
+		switch (ray)
 		{
-		case State::Empty:
+		case RayState::Empty:
 			color = ImColor(20, 20, 20, 255);
 			break;
-		case State::Working:
+		case RayState::Working:
 			color = ImColor(100, 100, 20, 255);
 			break;
-		case State::Done:
+		case RayState::Done:
 			color = ImColor(80, 120, 80, 255);
 			break;
 		}
@@ -610,106 +299,143 @@ void Raytracer::WorkerThread::Imgui()
 	}
 }
 
-bool Raytracer::WorkerThread::TryQueue(RayJob aRay)
+bool Raytracer::WorkerThread::CanRender()
 {
-	std::atomic_thread_fence(std::memory_order::memory_order_acquire);
+	return myWriteHead->myState == RayState::Empty;
+}
 
-	if (myStates[myWriteHead].load(std::memory_order::memory_order_relaxed) != State::Empty)
+void Raytracer::WorkerThread::Render(fisk::tools::V2ui aUV)
+{
+	myWriteHead->myUV = aUV;
+	myWriteHead->myResult = {};
+	myWriteHead->myState = RayState::Working;
+
+	myWriteHead++;
+
+	myPending++;
+}
+
+bool Raytracer::WorkerThread::GetResult(Result& aOut)
+{
+	if (myReadHead->myState != RayState::Done)
 		return false;
 
 
-	myRays[myWriteHead].store(aRay, std::memory_order::relaxed);
-	myStates[myWriteHead].store(State::Working, std::memory_order::relaxed);
+	aOut = 
+	{
+		myReadHead->myUV,
+		myReadHead->myResult
+	};
 
-	myWriteHead = (myWriteHead + 1) % SampleQueueSize;
-
-	std::atomic_thread_fence(std::memory_order::memory_order_release);
+	myReadHead->myState = RayState::Empty;
+	myReadHead++;
+	myPending--;
 
 	return true;
 }
 
-bool Raytracer::WorkerThread::TryRetrieve(RayJob& aOutRay)
+size_t Raytracer::WorkerThread::GetPending()
 {
-	std::atomic_thread_fence(std::memory_order::memory_order_acquire);
-
-	if (myStates[myReadHead].load(std::memory_order::memory_order_relaxed) != State::Done)
-		return false;
-
-
-	aOutRay = myRays[myReadHead].load(std::memory_order::memory_order_acquire);
-	myStates[myReadHead].store(State::Empty, std::memory_order::memory_order_relaxed);
-
-	myReadHead = (myReadHead + 1) % SampleQueueSize;
-
-	return true;
-}
-
-bool Raytracer::WorkerThread::IsWorking()
-{
-	std::atomic_thread_fence(std::memory_order::memory_order_acquire);
-	for (size_t i = 0; i < SampleQueueSize; i++)
-		if (myStates[i].load(std::memory_order::relaxed) == State::Working)
-			return true;
-
-	return false;
+	return myPending;
 }
 
 void Raytracer::WorkerThread::Run()
 {
 	while (!myStopRequested.load(std::memory_order::memory_order_acquire))
 	{
-		bool didWork = false;
-
-		std::atomic_thread_fence(std::memory_order::memory_order_acquire);
-
-		for (size_t i = 0; i < SampleQueueSize; i++)
+		if (myReadHead->myState != RayState::Working)
 		{
-			if (myStates[i].load(std::memory_order::memory_order_relaxed) == State::Working)
-			{
-				didWork = true;
-				
-				if (StepRay(myRays[i]))
-					myStates[i].store(State::Done, std::memory_order::memory_order_relaxed);
-			}
+			std::this_thread::yield();
+			continue;
 		}
 
-		std::atomic_thread_fence(std::memory_order::memory_order_release);
-
-		if (!didWork)
-			std::this_thread::yield();
+		myReadHead->myResult = RenderTexel(myReadHead->myUV);
+		myReadHead->myState = RayState::Done;
+		myRenderHead++;
 	}
 }
 
-bool Raytracer::WorkerThread::CalculateNextRay(RayJob& aInOutJob)
+Raytracer::TextureType::PackedValues Raytracer::WorkerThread::RenderTexel(fisk::tools::V2ui aUV)
 {
-	if (aInOutJob.myBounces > 10)
-		return true;
+	TextureType::PackedValues out;
 
-	std::optional<Hit> hit = myIntersector.Intersect(aInOutJob.myRay);
-	
-	if (!hit)
-	{
-		mySky.BlendWith(aInOutJob.myColor, aInOutJob.myRay);
-		return true;
-	}
-
-	hit->myMaterial->InteractWith(aInOutJob.myRay, *hit, aInOutJob.myColor);
-	
-	if (aInOutJob.myFirstObject == 0)
-		aInOutJob.myFirstObject = hit->myObjectId;
-
-	return false;
-}
-
-bool Raytracer::WorkerThread::StepRay(std::atomic<RayJob>& aJob)
-{
-	RayJob ray = aJob.load(std::memory_order::memory_order_relaxed);
 	using clock = std::chrono::high_resolution_clock;
 	clock::time_point start = clock::now();
 
-	bool isFinalHit = CalculateNextRay(ray);
+	std::vector<Sample> samples;
+	samples.reserve(mySamplesPerTexel);
 
-	ray.myTimeSpent += clock::now() - start;
-	aJob.store(ray, std::memory_order::memory_order_relaxed);
-	return isFinalHit;
+	for (size_t i = 0; i < mySamplesPerTexel; i++)
+		samples.push_back(SampleTexel(aUV));
+
+	fisk::tools::V3f& color = std::get<ColorChannel>(out);
+
+	for (size_t i = 0; i < mySamplesPerTexel; i++)
+		color += samples[i].myColor;
+	
+	color /= mySamplesPerTexel;
+
+	std::vector<unsigned int> objectsHit;
+	objectsHit.resize(samples.size());
+
+	auto corutine = ConvertVectorsAsync([](const Sample& aSample)
+		{
+			return aSample.myObjectId;
+		}, 
+		objectsHit, 
+		std::chrono::hours(1), 
+		samples);
+
+	while (!corutine.done())
+		corutine.resume();
+
+	std::sort(objectsHit.begin(), objectsHit.end());
+
+	std::vector<std::vector<unsigned int>> buckets = PartitionBy(objectsHit, [](unsigned int aLeft, unsigned int aRight)
+	{
+		return aLeft != aRight;
+	});
+
+	unsigned int mostHit = 0;
+	size_t hits = 0;
+
+	for (auto& bucket : buckets)
+	{
+		if (bucket.size() > hits)
+		{
+			mostHit = bucket[0];
+			hits = bucket.size();
+		}
+	}
+
+	std::get<ObjectIdChannel>(out) = mostHit;
+
+	std::get<TimeChannel>(out) = clock::now() - start;
+
+	return out;
+}
+
+Raytracer::WorkerThread::Sample Raytracer::WorkerThread::SampleTexel(fisk::tools::V2ui aUV)
+{
+	Sample out;
+
+	fisk::tools::Ray<float, 3> ray = myRayCaster.Render(aUV);
+
+	for (size_t i = 0; i < MaxBounces; i++)
+	{
+		std::optional<Hit> hit = myIntersector.Intersect(ray);
+
+		if (!hit)
+		{
+			mySky.BlendWith(out.myColor, ray);
+			break;
+		}
+
+		hit->myMaterial->InteractWith(ray, *hit, out.myColor);
+
+		if (out.myObjectId == 0)
+			out.myObjectId = hit->myObjectId;
+	}
+
+	return out;
 }

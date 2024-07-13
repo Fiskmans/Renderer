@@ -71,10 +71,7 @@ void RaytracerOutputViewer::Imgui()
 	const char* ChannelNames[] = {
 		"Color",
 		"Time taken",
-		"Object",
-		"Number of samples",
-		"Standard deviation",
-		"Expected change"
+		"Object"
 	};
 
 	if (ImGui::BeginCombo("Channel", ChannelNames[static_cast<int>(myChannel)]))
@@ -133,17 +130,7 @@ void RaytracerOutputViewer::Imgui()
 
 		if (mousePos.x > 0 && mousePos.y > 0 && mousePos.x < myTextureData.GetSize()[0] - 1 && mousePos.y < myTextureData.GetSize()[1] - 1)
 		{
-			auto [color, rawTimeSpent, objectId, samples, varianceAggregate] = myTextureData.GetTexel({static_cast<unsigned int>(mousePos.x), static_cast<unsigned int>(mousePos.y)});
-
-			fisk::tools::V3f variance = varianceAggregate / samples;
-			fisk::tools::V3f stdDev =
-			{
-				std::sqrt(variance[0]),
-				std::sqrt(variance[1]),
-				std::sqrt(variance[2])
-			};
-
-			float expectedChange = Raytracer::ExpectedChange(varianceAggregate, samples);
+			auto [color, rawTimeSpent, objectId] = myTextureData.GetTexel({static_cast<unsigned int>(mousePos.x), static_cast<unsigned int>(mousePos.y)});
 
 			ImGui::Text("Color ");
 			ImGui::SameLine();
@@ -153,10 +140,6 @@ void RaytracerOutputViewer::Imgui()
 			ImGui::SameLine();
 			fisk::tools::V3f objectColor = ObjectIdToColor(objectId);
 			ImGui::ColorButton("ObjectID", { objectColor[0], objectColor[1], objectColor[2], 1 });
-
-			ImGui::Text("Samples: %u", samples);
-			ImGui::DragFloat3("Std deviation", stdDev.Raw());
-			ImGui::DragFloat("ExpectedChange", &expectedChange);
 
 			std::chrono::nanoseconds integerTimeSpent = std::chrono::duration_cast<std::chrono::nanoseconds>(rawTimeSpent);
 		
@@ -274,15 +257,6 @@ void RaytracerOutputViewer::FlushImage(bool aRestart)
 			break;
 		case RaytracerOutputViewer::Channel::Object:
 			myTask = ConvertVectorsAsync(idMutator, myFrameBuffer, 2ms, myTextureData.Channel<2>());
-			break;
-		case RaytracerOutputViewer::Channel::NumberOfSamples:
-			myTask = ConvertVectorsAsync(samplesMutator, myFrameBuffer, 2ms, myTextureData.Channel<3>());
-			break;
-		case RaytracerOutputViewer::Channel::Variance:
-			myTask = ConvertVectorsAsync(varianceMutator, myFrameBuffer, 2ms, myTextureData.Channel<4>(), myTextureData.Channel<3>());
-			break;
-		case RaytracerOutputViewer::Channel::ExpectedChange:
-			myTask = ConvertVectorsAsync(expectedChangeMutator, myFrameBuffer, 2ms, myTextureData.Channel<4>(), myTextureData.Channel<3>());
 			break;
 		}
 
