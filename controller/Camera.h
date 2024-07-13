@@ -5,7 +5,9 @@
 
 #include "Shapes.h"
 
-class Camera
+#include "IRenderer.h"
+
+class Camera : public IRenderer<fisk::tools::Ray<float, 3>>
 {
 public:
 	struct Lens
@@ -19,7 +21,7 @@ public:
 
 	Camera(fisk::tools::V2ui aScreenSize, fisk::tools::Ray<float, 3> aAim, float aXFov, Lens aLens);
 
-	fisk::tools::Ray<float, 3> RayAt(fisk::tools::V2ui aUV);
+	Result Render(fisk::tools::V2ui aUV);
 
 	fisk::tools::V3f GetPosition();
 	fisk::tools::V3f GetFocalpoint();

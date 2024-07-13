@@ -46,8 +46,8 @@ private:
 	bool myHasLock = false;
 };
 
-Raytracer::Raytracer(fisk::tools::V2ui aSize, Camera& aCamera, IIntersector& aIntersector, Sky& aSky, float aAllowableNoise, unsigned int aPixelsPerTexel, size_t aWorkerThreads)
-	: myCamera(aCamera)
+Raytracer::Raytracer(fisk::tools::V2ui aSize, IRenderer<fisk::tools::Ray<float, 3>>& aRayCaster, IIntersector& aIntersector, Sky& aSky, float aAllowableNoise, unsigned int aPixelsPerTexel, size_t aWorkerThreads)
+	: myRayCaster(aRayCaster)
 	, myIntersector(aIntersector)
 	, mySky(aSky)
 	, myAllowableNoise(aAllowableNoise)
@@ -140,7 +140,7 @@ void Raytracer::Imgui()
 
 		if (mousePos.x > 0 && mousePos.y > 0 && mousePos.x < mySize[0] * myPixelsPerTexel && mousePos.y < mySize[1] * myPixelsPerTexel)
 		{
-			fisk::tools::Ray<float, 3> ray = myCamera.RayAt({ static_cast<unsigned int>(mousePos.x / myPixelsPerTexel), static_cast<unsigned int>(mousePos.y / myPixelsPerTexel) });
+			fisk::tools::Ray<float, 3> ray = myRayCaster.Render({ static_cast<unsigned int>(mousePos.x / myPixelsPerTexel), static_cast<unsigned int>(mousePos.y / myPixelsPerTexel) });
 
 			ImGui::Text("Hovered pixel");
 			ImGui::DragFloat3("Direction", ray.myDirection.Raw());
@@ -148,11 +148,16 @@ void Raytracer::Imgui()
 
 			ImGui::Text("");
 
-			ImGui::Text("Camera");
-			ImGui::DragFloat3("Position", myCamera.GetPosition().Raw());
-			ImGui::DragFloat3("FocalPoint", myCamera.GetFocalpoint().Raw());
-			ImGui::DragFloat3("Right", myCamera.GetCameraRight().Raw());
-			ImGui::DragFloat3("Up", myCamera.GetCameraUp().Raw());
+			Camera* cam = dynamic_cast<Camera*>(&myRayCaster);
+
+			if (cam)
+			{
+				ImGui::Text("Camera");
+				ImGui::DragFloat3("Position", cam->GetPosition().Raw());
+				ImGui::DragFloat3("FocalPoint", cam->GetFocalpoint().Raw());
+				ImGui::DragFloat3("Right", cam->GetCameraRight().Raw());
+				ImGui::DragFloat3("Up", cam->GetCameraUp().Raw());
+			}
 		}
 	}
 
@@ -272,7 +277,7 @@ Raytracer::RayJob Raytracer::CurrentRay()
 	job.myColor = { 1, 1, 1 };
 	job.myOriginTexel = at;
 
-	job.myRay = myCamera.RayAt(at);
+	job.myRay = myRayCaster.Render(at);
 
 	job.myBounces = 0;
 	job.myFirstObject = 0;

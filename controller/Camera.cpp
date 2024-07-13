@@ -40,7 +40,7 @@ fisk::tools::V2f Raytracer::NormalizedUV(fisk::tools::V2ui aUV)
 }
 */
 
-fisk::tools::Ray<float, 3> Camera::RayAt(fisk::tools::V2ui aUV)
+Camera::Result Camera::Render(fisk::tools::V2ui aUV)
 {
 	thread_local std::random_device seed;
 	thread_local std::mt19937 rng(seed());

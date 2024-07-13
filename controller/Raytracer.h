@@ -40,7 +40,7 @@ public:
 	static constexpr size_t SamplesChannel = 3;
 	static constexpr size_t VarianceAggregateChannel = 4;
 
-	Raytracer(fisk::tools::V2ui aSize, Camera& aCamera, IIntersector& aIntersector, Sky& aSky, float aAllowableNoise, unsigned int aPixelsPerTexel, size_t aWorkerThreads);
+	Raytracer(fisk::tools::V2ui aSize, IRenderer<fisk::tools::Ray<float, 3>>& aRayCaster, IIntersector& aIntersector, Sky& aSky, float aAllowableNoise, unsigned int aPixelsPerTexel, size_t aWorkerThreads);
 	~Raytracer();
 
 	Raytracer(Raytracer&) = delete;
@@ -134,7 +134,7 @@ private:
 
 	void MergeOuput();
 
-	Camera& myCamera;
+	IRenderer<fisk::tools::Ray<float, 3>>& myRayCaster;
 	IIntersector& myIntersector;
 	Sky& mySky;
 	float myAllowableNoise;
