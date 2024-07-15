@@ -2,6 +2,7 @@
 #include "Window.h"
 
 #include "tools/Logger.h"
+#include "tools/Time.h"
 
 namespace fisk
 {
@@ -97,6 +98,8 @@ namespace fisk
 
 	bool Window::ProcessEvents()
 	{
+		fisk::tools::ScopeDiagnostic perfLock("process events");
+
 		MSG message;
 		while (PeekMessage(&message, myWindowHandle, 0, 0, PM_REMOVE))
 		{

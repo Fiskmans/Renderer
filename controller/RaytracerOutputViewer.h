@@ -25,14 +25,15 @@ private:
 	void FlushImageData(const std::vector<fisk::tools::V3f>& aData);
 	void CreateGraphicsResources();
 
-	fisk::tools::V3f ObjectIdToColor(unsigned int aObjectId);
+	fisk::tools::V3f ObjectIdToColor(unsigned int aObjectId, unsigned int aSubObjectId);
 	fisk::tools::V3f MonoChannelColor(float aValue);
 
 	enum class Channel : int
 	{
 		Color,
 		TimeTaken,
-		Object
+		Object,
+		Renderer
 	};
 
 	fisk::GraphicsFramework& myFramework;

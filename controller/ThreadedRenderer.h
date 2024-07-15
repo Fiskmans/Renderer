@@ -140,14 +140,14 @@ inline void ThreadedRenderer<TexelType, QueueSize>::Run()
 {
 	while (!myStopRequested.load(std::memory_order::memory_order_acquire))
 	{
-		if (myReadHead->myState != RenderSlotState::Working)
+		if (myRenderHead->myState != RenderSlotState::Working)
 		{
-			std::this_thread::yield();
+			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			continue;
 		}
 
-		myReadHead->myResult = myBaseRenderer.Render(myReadHead->myUV);
-		myReadHead->myState = RenderSlotState::Done;
+		myRenderHead->myResult = myBaseRenderer.Render(myRenderHead->myUV);
+		myRenderHead->myState = RenderSlotState::Done;
 		myRenderHead++;
 	}
 }

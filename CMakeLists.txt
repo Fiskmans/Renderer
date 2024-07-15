@@ -13,7 +13,14 @@ FetchContent_Declare(
   GIT_TAG        master
 )
 
+FetchContent_Declare(
+  assimp
+  GIT_REPOSITORY https://github.com/assimp/assimp.git
+  GIT_TAG        35e4f1bf6492e11485336c1518485413c599e00e
+)
+
 FetchContent_MakeAvailable(fisk_tools)
+FetchContent_MakeAvailable(assimp)
 
 add_subdirectory(imgui)
 add_subdirectory(controller)

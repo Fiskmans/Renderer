@@ -15,8 +15,11 @@
 #include "ThreadedRenderer.h"
 #include "Window.h"
 #include "intersectors/DumbIntersector.h"
+#include "intersectors/ClusteredIntersector.h"
 
 #include "tools/Logger.h"
+
+#include "imgui/imgui.h"
 
 float operator ""_m(unsigned long long aValue)
 {
@@ -33,9 +36,31 @@ float operator ""_deg(unsigned long long aValue)
 	return aValue * 0.0174532f;
 }
 
+void DiagnosticNode(fisk::tools::TimeTree* aTree)
+{
+	ImGui::Text("%s [%llu] %.3fs %2.1f%%", aTree->myName, aTree->myCallCount, aTree->myTime, aTree->myCovarage * 100.f);
+	ImGui::Indent();
+
+	for (fisk::tools::TimeTree* child : aTree->myChildren)
+		DiagnosticNode(child);
+	
+	ImGui::Unindent();
+}
+
+void Diagnostics()
+{
+	ImGui::Begin("Diagnostics");
+
+	DiagnosticNode(fisk::tools::GetTimeTreeRoot());
+
+	ImGui::End();
+}
+
 int main(int argc, char** argv)
 {
 	using namespace std::chrono_literals;
+
+	fisk::tools::ScopeDiagnostic perfLock1("main");
 
 	fisk::tools::SetFilter(fisk::tools::All);
 	
@@ -51,6 +76,7 @@ int main(int argc, char** argv)
 	fisk::ImguiHelper imguiHelper(framework, window);
 
 	constexpr size_t scaleFactor = 8;
+	constexpr size_t samples = 1000;
 
 	Camera::Lens lens;
 
@@ -61,102 +87,29 @@ int main(int argc, char** argv)
 
 	Camera camera(window.GetWindowSize() / scaleFactor, fisk::tools::Ray<float, 3>::FromPointandTarget({ 2_m, 6_m, 8_m }, { 0_m, 0_m, 0_m}), 100_deg, lens);
 
-	Sky skyBox({ 1, 1, 1 }, 20_deg, { 1462.436f, 1049.146f, 303.80522f }, { 178.5f, 229.5f, 255.f });
+	Sky skyBox({ 1, 1, 1 }, 23_deg, { 1462.436f, 1049.146f, 303.80522f }, { 178.5f, 229.5f, 255.f });
 
-	Scene scene;
+	std::unique_ptr<Scene> scene = Scene::FromFile("C:/Users/Fi/Documents/Scenes/Example.fbx");
+
+	DumbIntersector dumbIntersector(*scene);
+	ClusteredIntersector clusterIntersector(*scene);
 
 
-	Material redMat;
-	Material greenMat;
-	Material blueMat;
-	Material grayMat;
-	Material leftWallMat;
-	Material frontWallMat;
-
-	{
-		redMat.myColor = { 1, 0.3f, 0.3f };
-		redMat.specular = 0.2f;
-	}
-	{
-		greenMat.myColor = { 0.3f, 1, 0.3f };
-		greenMat.specular = 0.1f;
-	}
-	{
-		blueMat.myColor = { 0.3f, 0.3f, 1 };
-		blueMat.specular = 0.4f;
-	}
-	{
-		grayMat.myColor = { 0.4f, 0.4f, 0.4f };
-		grayMat.specular = 0.01f;
-	}
-	{
-		leftWallMat.myColor = { 0.9f, 0.86f, 0.8f };
-		leftWallMat.specular = 0.1f;
-	}
-	{
-		leftWallMat.myColor = { 0.96f, 0.86f, 0.8f };
-		leftWallMat.specular = 0.01f;
-	}
-
-	{
-		fisk::tools::Sphere<float> sphere;
-
-		sphere.myCenter = { 2_m, 1_m, 1_m };
-		sphere.myRadius = 1_m;
-
-		scene.Add(sphere, &redMat);
-	}
-	{
-		fisk::tools::Sphere<float> sphere;
-
-		sphere.myCenter = { 6_m, 3_m, 1_m };
-		sphere.myRadius = 3_m;
-
-		scene.Add(sphere, &greenMat);
-	}
-	{
-		fisk::tools::Sphere<float> sphere;
-
-		sphere.myCenter = { -3_m, 2_m, -1_m };
-		sphere.myRadius = 2_m;
-
-		scene.Add(sphere, &blueMat);
-	}
-
-	{
-		fisk::tools::Plane<float> plane;
-
-		plane.myNormal = { 0, 1, 0 };
-		plane.myDistance = 0_m;
-
-		scene.Add(plane, &grayMat);
-	}
-	//{
-	//	fisk::tools::Plane<float> plane;
-	//
-	//	plane.myNormal = { 0, 0, 1 };
-	//	plane.myDistance = -6_m;
-	//
-	//	scene.Add(plane, &leftWallMat);
-	//}
-	//{
-	//	fisk::tools::Plane<float> plane;
-	//
-	//	plane.myNormal = { 1, 0, 0 };
-	//	plane.myDistance = -5_m - 5_cm;
-	//
-	//	scene.Add(plane, &frontWallMat);
-	//}
-
-	DumbIntersector dumbIntersector(scene);
-
-	RayRenderer baseRenderer(camera, dumbIntersector, skyBox, 1000);
-
+	std::vector<RayRenderer*> baseRenderers;
 	std::vector<IAsyncRenderer<TextureType::PackedValues>*> renderers;
 
-	for (size_t i = 0; i < (std::max)(static_cast<int>(std::thread::hardware_concurrency()) - 2, 4); i++)
+	for (size_t i = 0; i < 4; i++)
 	{
-		renderers.push_back(new ThreadedRenderer<TextureType::PackedValues, 16>(baseRenderer));
+		RayRenderer* baseRenderer = new RayRenderer(camera, dumbIntersector, skyBox, samples, i + 1);
+		baseRenderers.push_back(baseRenderer);
+		renderers.push_back(new ThreadedRenderer<TextureType::PackedValues, 1024>(*baseRenderer));
+	}
+
+	for (size_t i = 0; i < 4; i++)
+	{
+		RayRenderer* baseRenderer = new RayRenderer(camera, clusterIntersector, skyBox, samples, i + 1 + 100);
+		baseRenderers.push_back(baseRenderer);
+		renderers.push_back(new ThreadedRenderer<TextureType::PackedValues, 1024>(*baseRenderer));
 	}
 
 	TextureType texture(window.GetWindowSize() / scaleFactor, {});
@@ -165,11 +118,20 @@ int main(int argc, char** argv)
 	RaytracerOutputViewer viewer(framework, texture, window.GetWindowSize());
 	
 	fisk::tools::EventReg viewerImguiHandle = imguiHelper.DrawImgui.Register([&viewer](){ viewer.Imgui(); });
-	fisk::tools::EventReg flushHandle = framework.AfterPresent.Register([&viewer](){ viewer.DrawImage(); });
+	fisk::tools::EventReg diagnosticImguiHandle = imguiHelper.DrawImgui.Register([](){ Diagnostics(); });
+
+	fisk::tools::EventReg flushHandle = framework.AfterPresent.Register([&viewer]() { viewer.DrawImage(); });
+
+
+
 
 	while (window.ProcessEvents())
 	{
-		orcherstrator.Update(); // TODO: finnish
-		framework.Present(fisk::GraphicsFramework::VSyncState::OnVerticalBlank);
+
+		fisk::tools::ScopeDiagnostic perfLock2("main Update");
+
+		orcherstrator.Update(); // TODO: finish/save when done
+
+		framework.Present(fisk::GraphicsFramework::VSyncState::Immediate);
 	}
 }

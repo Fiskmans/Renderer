@@ -16,6 +16,7 @@ list(APPEND FILES Material.h Material.cpp)
 list(APPEND FILES RayRenderer.h RayRenderer.cpp)
 list(APPEND FILES RaytracerOutputViewer.h RaytracerOutputViewer.cpp)
 list(APPEND FILES RegionGenerator.h RegionGenerator.cpp)
+list(APPEND FILES PolyObject.h PolyObject.cpp)
 list(APPEND FILES Scene.h Scene.cpp)
 list(APPEND FILES Sky.h Sky.cpp)
 
@@ -25,12 +26,14 @@ list(APPEND FILES Window.h Window.cpp)
 
 list(APPEND FILES IIntersector.h)
 list(APPEND FILES intersectors/DumbIntersector.h intersectors/DumbIntersector.cpp)
+list(APPEND FILES intersectors/ClusteredIntersector.h intersectors/ClusteredIntersector.cpp)
 
 
 add_executable(Controller ${FILES})
 
 target_link_libraries(Controller PUBLIC fisk_tools)
 target_link_libraries(Controller PUBLIC fisk_imgui)
+target_link_libraries(Controller PUBLIC assimp)
 
 target_link_libraries(Controller PUBLIC d3d11.lib) 
 target_link_libraries(Controller PUBLIC d3dcompiler.lib)

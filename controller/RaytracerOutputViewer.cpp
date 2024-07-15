@@ -3,6 +3,7 @@
 
 
 #include "imgui/imgui.h"
+#include "tools/Time.h"
 
 #include <d3dcompiler.h>
 #include <random>
@@ -18,6 +19,7 @@ RaytracerOutputViewer::RaytracerOutputViewer(fisk::GraphicsFramework& aFramework
 	, myWindowSize(aWindowSize)
 	, myChannel(Channel::Color)
 	, myTimescale(std::chrono::microseconds(10))
+	, myImageversion(0)
 {
 	myFrameBuffer.resize(myTextureData.GetSize()[0] * myTextureData.GetSize()[1]);
 	CreateGraphicsResources();
@@ -25,6 +27,8 @@ RaytracerOutputViewer::RaytracerOutputViewer(fisk::GraphicsFramework& aFramework
 
 void RaytracerOutputViewer::DrawImage()
 {
+	fisk::tools::ScopeDiagnostic perfLock1("DrawImage");
+
 	if (myImageversion < myTextureData.GetVersion() || myTask) // slightly thread unsafe, may not realize there are new version when there is
 		FlushImage(false);
 
@@ -55,6 +59,8 @@ void RaytracerOutputViewer::DrawImage()
 
 void RaytracerOutputViewer::Imgui()
 {
+	fisk::tools::ScopeDiagnostic perfLock1("Viewer Imgui");
+
 	using namespace std::chrono_literals;
 
 	ImGui::Begin("Viewer");
@@ -71,7 +77,8 @@ void RaytracerOutputViewer::Imgui()
 	const char* ChannelNames[] = {
 		"Color",
 		"Time taken",
-		"Object"
+		"Object",
+		"Renderer"
 	};
 
 	if (ImGui::BeginCombo("Channel", ChannelNames[static_cast<int>(myChannel)]))
@@ -130,16 +137,26 @@ void RaytracerOutputViewer::Imgui()
 
 		if (mousePos.x > 0 && mousePos.y > 0 && mousePos.x < myTextureData.GetSize()[0] - 1 && mousePos.y < myTextureData.GetSize()[1] - 1)
 		{
-			auto [color, rawTimeSpent, objectId] = myTextureData.GetTexel({static_cast<unsigned int>(mousePos.x), static_cast<unsigned int>(mousePos.y)});
+			auto [color, rawTimeSpent, objectId, subObjectId, rendererId] = myTextureData.GetTexel({static_cast<unsigned int>(mousePos.x), static_cast<unsigned int>(mousePos.y)});
 
 			ImGui::Text("Color ");
 			ImGui::SameLine();
 			ImGui::ColorButton("Color", { color[0], color[1], color[2], 1 });
 
 			ImGui::Text("Object: %u", objectId);
+			if (subObjectId != 0)
+			{
+				ImGui::SameLine();
+				ImGui::Text(": %u", subObjectId);
+			}
 			ImGui::SameLine();
-			fisk::tools::V3f objectColor = ObjectIdToColor(objectId);
+			fisk::tools::V3f objectColor = ObjectIdToColor(objectId, subObjectId);
 			ImGui::ColorButton("ObjectID", { objectColor[0], objectColor[1], objectColor[2], 1 });
+
+			ImGui::Text("Renderer: %u", rendererId);
+			fisk::tools::V3f rendererColor = ObjectIdToColor(rendererId, 0);
+			ImGui::ColorButton("RendererID", { rendererColor[0], rendererColor[1], rendererColor[2], 1 });
+
 
 			std::chrono::nanoseconds integerTimeSpent = std::chrono::duration_cast<std::chrono::nanoseconds>(rawTimeSpent);
 		
@@ -208,9 +225,6 @@ void RaytracerOutputViewer::FlushImage(bool aRestart)
 		{
 			return
 			{
-				std::pow(aColor[0] / 255.f, 2.2f),
-				std::pow(aColor[1] / 255.f, 2.2f),
-				std::pow(aColor[2] / 255.f, 2.2f)
 			};
 		};
 
@@ -221,21 +235,30 @@ void RaytracerOutputViewer::FlushImage(bool aRestart)
 			return MonoChannelColor(v);
 		};
 
-		auto idMutator = [this](unsigned int aObjectId) -> fisk::tools::V3f
+		auto idMutator = [this](unsigned int aObjectId, unsigned int aSubObjectId) -> fisk::tools::V3f
 		{
-			return ObjectIdToColor(aObjectId);
+			return ObjectIdToColor(aObjectId, aSubObjectId);
+		};
+
+		auto rendererMutator = [this](unsigned int aRendererID) -> fisk::tools::V3f
+		{
+			return ObjectIdToColor(aRendererID, 0);
 		};
 
 		switch (myChannel)
 		{
 		case RaytracerOutputViewer::Channel::Color:
-			myTask = ConvertVectorsAsync(colorMutator, myFrameBuffer, 2ms, myTextureData.Channel<0>());
+			myFrameBuffer = myTextureData.Channel<ColorChannel>();
+			FlushImageData(myFrameBuffer);
 			break;
 		case RaytracerOutputViewer::Channel::TimeTaken:
-			myTask = ConvertVectorsAsync(timeMutator, myFrameBuffer, 2ms, myTextureData.Channel<1>());
+			myTask = ConvertVectorsAsync(timeMutator, myFrameBuffer, 10us, myTextureData.Channel<TimeChannel>());
 			break;
 		case RaytracerOutputViewer::Channel::Object:
-			myTask = ConvertVectorsAsync(idMutator, myFrameBuffer, 2ms, myTextureData.Channel<2>());
+			myTask = ConvertVectorsAsync(idMutator, myFrameBuffer, 10us, myTextureData.Channel<ObjectIdChannel>(), myTextureData.Channel<SubObjectIdChannel>());
+			break;
+		case RaytracerOutputViewer::Channel::Renderer:
+			myTask = ConvertVectorsAsync(rendererMutator, myFrameBuffer, 10us, myTextureData.Channel<RendererChannel>());
 			break;
 		}
 
@@ -463,19 +486,47 @@ VertexToPixel vertexShader(Vertex i)
 	}
 }
 
-fisk::tools::V3f RaytracerOutputViewer::ObjectIdToColor(unsigned int aObjectId)
+fisk::tools::V3f RaytracerOutputViewer::ObjectIdToColor(unsigned int aObjectId, unsigned int aSubObjectId)
 {
+	using Key = size_t;
+	assert(sizeof(size_t) >= sizeof(aObjectId) + sizeof(aSubObjectId));
+
+	static std::unordered_map<Key, fisk::tools::V3f> cache;
+
+	Key key = ((static_cast<Key>(aObjectId)) << (sizeof(aObjectId) * CHAR_BIT)) | static_cast<Key>(aSubObjectId);
+
 	if (aObjectId == 0)
 		return { 0, 0, 0 };
+
+	decltype(cache)::const_iterator cachedIt = cache.find(key);
+
+	if (cachedIt != cache.end())
+		return cachedIt->second;
 
 	std::mt19937 rng(aObjectId);
 	std::uniform_real_distribution<float> dist(0, 0.6f);
 
-	return {
+	fisk::tools::V3f color{
 		dist(rng) + 0.3f,
 		dist(rng) + 0.3f,
 		dist(rng) + 0.3f
 	};
+
+	if (aSubObjectId != 0)
+	{
+		std::mt19937 subRNG(aSubObjectId);
+		std::uniform_real_distribution<float> subDist(-0.02f, 0.02f);
+
+		color += {
+			subDist(subRNG),
+			subDist(subRNG),
+			subDist(subRNG)
+		};
+	}
+
+	cache.insert({ key, color });
+
+	return color;
 }
 
 fisk::tools::V3f RaytracerOutputViewer::MonoChannelColor(float aValue)

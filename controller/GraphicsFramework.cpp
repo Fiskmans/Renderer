@@ -3,12 +3,13 @@
 
 #include <comdef.h>
 
+#include "tools/Time.h"
+
 namespace fisk
 {
 	GraphicsFramework::GraphicsFramework(Window& aWindow, int aBufferCount)
 		: myWindow(aWindow)
 		, myBufferCount(aBufferCount)
-		, myCurrentBuffer(0)
 	{
 
 		DXGI_SWAP_CHAIN_DESC desc;
@@ -67,24 +68,35 @@ namespace fisk
 
 	void GraphicsFramework::Present(VSyncState aVSync)
 	{
+		fisk::tools::ScopeDiagnostic perfLock("Present");
+
+
 		assert(mySwapChain);
 	
-		BeforePresent.Fire();
-
-		switch (aVSync)
 		{
-		case VSyncState::Immediate:
-			mySwapChain->Present(0, 0);
-			break;
-		case VSyncState::OnVerticalBlank:
-			mySwapChain->Present(1, 0);
-			break;
-		default:
-			break;
+			fisk::tools::ScopeDiagnostic perfLock1("Present pre events");
+			BeforePresent.Fire();
 		}
-		myCurrentBuffer = (myCurrentBuffer + 1) % myBufferCount;
 
-		AfterPresent.Fire();
+		{
+			fisk::tools::ScopeDiagnostic perfLock("Present libcall");
+			switch (aVSync)
+			{
+			case VSyncState::Immediate:
+				mySwapChain->Present(0, 0);
+				break;
+			case VSyncState::OnVerticalBlank:
+				mySwapChain->Present(1, 0);
+				break;
+			default:
+				break;
+			}
+		}
+
+		{
+			fisk::tools::ScopeDiagnostic perfLock1("Present post events");
+			AfterPresent.Fire();
+		}
 	}
 
 	ID3D11Device& GraphicsFramework::Device()

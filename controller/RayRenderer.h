@@ -13,7 +13,7 @@ public:
 	static constexpr size_t MaxBounces = 16;
 	using RayCaster = IRenderer<fisk::tools::Ray<float, 3>>;
 
-	RayRenderer(RayCaster& aRayCaster, IIntersector& aIntersector, Sky& aSky, size_t aSamplesPerTexel);
+	RayRenderer(RayCaster& aRayCaster, IIntersector& aIntersector, Sky& aSky, size_t aSamplesPerTexel, unsigned int aRendererId);
 
 	Result Render(fisk::tools::V2ui aUV) override;
 
@@ -23,6 +23,7 @@ private:
 	{
 		fisk::tools::V3f myColor{ 1, 1, 1 };
 		unsigned int myObjectId = 0;
+		unsigned int mySubObjectId = 0;
 	};
 
 	Sample SampleTexel(fisk::tools::V2ui aUV);
@@ -31,4 +32,5 @@ private:
 	IIntersector& myIntersector;
 	Sky& mySky;
 	size_t mySamplesPerTexel;
+	unsigned int myRendererId;
 };

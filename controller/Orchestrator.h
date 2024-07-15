@@ -1,6 +1,7 @@
 #pragma once
 
 #include "tools/MathVector.h"
+#include "tools/Time.h"
 
 #include "MultichannelTexture.h"
 
@@ -23,7 +24,6 @@ public:
 private:
 	TextureType& myTexture;
 
-
 	RegionGenerator myGenerator;
 	std::vector<IAsyncRenderer<TexelType>*> myRenderers;
 };
@@ -39,9 +39,12 @@ inline Orchestrator<TextureType>::Orchestrator(TextureType& aTexture, std::vecto
 template<class TextureType>
 inline bool Orchestrator<TextureType>::Update()
 {
+	fisk::tools::ScopeDiagnostic perfLock("update");
 	if (!myGenerator.Done())
 	{
-		for (auto& renderer : myRenderers)
+		fisk::tools::ScopeDiagnostic perfLock("scheduling");
+
+		for (auto* renderer : myRenderers)
 		{
 			if (myGenerator.Done())
 				break;
@@ -49,6 +52,7 @@ inline bool Orchestrator<TextureType>::Update()
 			while (renderer->CanRender())
 			{
 				renderer->Render(myGenerator.Get());
+				
 				if (!myGenerator.Next())
 					break;
 			}
@@ -57,15 +61,21 @@ inline bool Orchestrator<TextureType>::Update()
 
 	bool hasPending = false;
 
+
 	for (auto& renderer : myRenderers)
 	{
+		fisk::tools::ScopeDiagnostic perfLock("merging");
+
 		typename IAsyncRenderer<TexelType>::Result result;
 		while (renderer->GetResult(result))
+		{
 			myTexture.SetTexel(std::get<0>(result), std::get<1>(result));
+		}
 
 		if (renderer->GetPending() > 0)
 			hasPending = true;
 	}
+
 
 	if (!myGenerator.Done())
 		return true;

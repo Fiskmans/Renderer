@@ -138,7 +138,6 @@ namespace fisk
 		tools::EventReg myResizeEventHandle;
 
 		int myBufferCount;
-		int myCurrentBuffer;
 
 		ContextUtilityLibrary myContextUtilityLibrary;
 		COMObject<ID3D11Device> myDevice = nullptr;

@@ -6,11 +6,12 @@
 #include <algorithm>
 #include <chrono>
 
-RayRenderer::RayRenderer(RayCaster& aRayCaster, IIntersector& aIntersector, Sky& aSky, size_t aSamplesPerTexel)
+RayRenderer::RayRenderer(RayCaster& aRayCaster, IIntersector& aIntersector, Sky& aSky, size_t aSamplesPerTexel, unsigned int aRendererId)
 	: myRayCaster(aRayCaster)
 	, myIntersector(aIntersector)
 	, mySky(aSky)
 	, mySamplesPerTexel(aSamplesPerTexel)
+	, myRendererId(aRendererId)
 {
 }
 
@@ -34,19 +35,30 @@ RayRenderer::Result RayRenderer::Render(fisk::tools::V2ui aUV)
 
 	color /= mySamplesPerTexel;
 
+	color = {
+		std::pow(color[0] / 255.f, 2.2f),
+		std::pow(color[1] / 255.f, 2.2f),
+		std::pow(color[2] / 255.f, 2.2f)
+	};
+
 	std::vector<unsigned int> objectsHit;
-	objectsHit.resize(samples.size());
 
-	auto corutine = ConvertVectorsAsync([](const Sample& aSample)
 	{
-		return aSample.myObjectId;
-	},
-		objectsHit,
-		std::chrono::hours(1),
-		samples);
+		objectsHit.resize(samples.size());
+		auto corutine = ConvertVectorsAsync(
+			[](const Sample& aSample)
+			{
+				return aSample.myObjectId;
+			},
+			objectsHit,
+			std::chrono::hours(1),
+			samples);
 
-	while (!corutine.done())
-		corutine.resume();
+		while (!corutine.done())
+			corutine.resume();
+
+		corutine.destroy();
+	}
 
 	std::sort(objectsHit.begin(), objectsHit.end());
 
@@ -67,9 +79,57 @@ RayRenderer::Result RayRenderer::Render(fisk::tools::V2ui aUV)
 		}
 	}
 
-	std::get<ObjectIdChannel>(out) = mostHit;
+	std::vector<Sample> hitsMainObject;
+	hitsMainObject.reserve(mySamplesPerTexel);
 
-	std::get<TimeChannel>(out) = clock::now() - start;
+	std::copy_if(samples.begin(), samples.end(), std::back_inserter(hitsMainObject), [mostHit](const Sample& aSample)
+	{
+		return aSample.myObjectId == mostHit;
+	});
+
+
+	{
+		objectsHit.resize(hitsMainObject.size());
+		auto corutine = ConvertVectorsAsync(
+			[](const Sample& aSample)
+			{
+				return aSample.mySubObjectId;
+			},
+			objectsHit,
+			std::chrono::hours(1),
+			hitsMainObject);
+
+		while (!corutine.done())
+			corutine.resume();
+
+		corutine.destroy();
+	}
+
+	std::sort(objectsHit.begin(), objectsHit.end());
+
+	std::vector<std::vector<unsigned int>> subHitBuckets = PartitionBy(objectsHit, [](unsigned int aLeft, unsigned int aRight)
+	{
+		return aLeft != aRight;
+	});
+
+	unsigned int mostHitSubObject = 0;
+	size_t subHits = 0;
+
+	for (auto& bucket : subHitBuckets)
+	{
+		if (bucket.size() > subHits)
+		{
+			mostHitSubObject = bucket[0];
+			subHits = bucket.size();
+		}
+	}
+
+
+	std::get<ObjectIdChannel>(out) = mostHit;
+	std::get<SubObjectIdChannel>(out) = mostHitSubObject;
+
+	std::get<TimeChannel>(out) = (clock::now() - start) / mySamplesPerTexel;
+	std::get<RendererChannel>(out) = myRendererId;
 
 	return out;
 }
@@ -93,7 +153,11 @@ RayRenderer::Sample RayRenderer::SampleTexel(fisk::tools::V2ui aUV)
 		hit->myMaterial->InteractWith(ray, *hit, out.myColor);
 
 		if (out.myObjectId == 0)
+		{
 			out.myObjectId = hit->myObjectId;
+			out.mySubObjectId = hit->mySubObjectId;
+		}
+
 	}
 
 	return out;
