@@ -117,7 +117,7 @@ void RaytracerOutputViewer::Imgui()
 		}
 
 		ImGui::SameLine();
-		ImGui::Text("(%uns)", myTimescale.count());
+		ImGui::Text("(%fns)", myTimescale.count());
 	}
 		break;
 	default:

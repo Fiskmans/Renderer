@@ -10,10 +10,10 @@ namespace material_randoms
 	thread_local std::uniform_real_distribution<float> uniform(0, 1);
 }
 
-void Material::InteractWith(fisk::tools::Ray<float, 3>& aInOutRay, Hit& aHit, fisk::tools::V3f& aColor)
+void Material::InteractWith(fisk::tools::Ray<float, 3>& aInOutRay, Hit& aHit, fisk::tools::V3f& aColor) const
 {
 
-	if (material_randoms::uniform(material_randoms::rng) < specular)
+	if (material_randoms::uniform(material_randoms::rng) < mySpecular)
 	{
 		ReflectSpecular(aInOutRay, aHit);
 		return;
@@ -22,28 +22,30 @@ void Material::InteractWith(fisk::tools::Ray<float, 3>& aInOutRay, Hit& aHit, fi
 	aColor *= myColor;
 	aInOutRay.myOrigin = aHit.myPosition;
 
-	ReflectDiffuse(aInOutRay, aHit);
+	ReflectDiffuse(aInOutRay, aHit, aColor);
 }
 
-void Material::ReflectSpecular(fisk::tools::Ray<float, 3>& aInOutRay, Hit& aHit)
+void Material::ReflectSpecular(fisk::tools::Ray<float, 3>& aInOutRay, Hit& aHit) const
 {
 	aInOutRay.myDirection.Reverse();
 	aInOutRay.myDirection.ReflectOn(aHit.myNormal);
 }
 
-void Material::ReflectDiffuse(fisk::tools::Ray<float, 3>& aInOutRay, Hit& aHit)
+void Material::ReflectDiffuse(fisk::tools::Ray<float, 3>& aInOutRay, Hit& aHit, fisk::tools::V3f& aColor) const
 {
-	fisk::tools::V3f dir
-	{
-		material_randoms::normalDist(material_randoms::rng),
-		material_randoms::normalDist(material_randoms::rng),
-		material_randoms::normalDist(material_randoms::rng)
-	};
+	aInOutRay.myOrigin = aHit.myPosition;
+	aInOutRay.myDirection = (aHit.myNormal + fisk::tools::V3f(
+												material_randoms::normalDist(material_randoms::rng),
+												material_randoms::normalDist(material_randoms::rng),
+												material_randoms::normalDist(material_randoms::rng))).GetNormalized();
+}
 
-	dir.Normalize();
+bool Material::Process(fisk::tools::DataProcessor& aProcessor)
+{
+	bool success = true;
 
-	if (dir.Dot(aHit.myNormal) < 0.f)
-		dir.Reverse();
-
-	aInOutRay.myDirection = dir;
+	success &= aProcessor.Process(myColor);
+	success &= aProcessor.Process(mySpecular);
+	
+	return success;
 }

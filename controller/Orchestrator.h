@@ -49,7 +49,7 @@ inline bool Orchestrator<TextureType>::Update()
 			if (myGenerator.Done())
 				break;
 
-			while (renderer->CanRender())
+			while (renderer->CanRender(myGenerator.Get()))
 			{
 				renderer->Render(myGenerator.Get());
 				

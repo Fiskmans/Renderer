@@ -7,6 +7,8 @@
 
 #include "IRenderer.h"
 
+#include <optional>
+
 class Camera : public IRenderer<fisk::tools::Ray<float, 3>>
 {
 public:
@@ -22,6 +24,8 @@ public:
 	Camera(fisk::tools::V2ui aScreenSize, fisk::tools::Ray<float, 3> aAim, float aXFov, Lens aLens);
 
 	Result Render(fisk::tools::V2ui aUV);
+
+	std::optional<fisk::tools::V2f> GetScreenPos(fisk::tools::V3f aPoint);
 
 	fisk::tools::V3f GetPosition();
 	fisk::tools::V3f GetFocalpoint();

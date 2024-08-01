@@ -12,4 +12,6 @@ struct PolyObject
 
 	static PolyObject FromTri(fisk::tools::Tri<float> aTri);
 	void AddTri(fisk::tools::Tri<float> aTri);
+
+	bool Process(fisk::tools::DataProcessor& aProcessor);
 };

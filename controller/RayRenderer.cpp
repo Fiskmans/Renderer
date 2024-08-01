@@ -33,7 +33,7 @@ RayRenderer::Result RayRenderer::Render(fisk::tools::V2ui aUV)
 	for (size_t i = 0; i < mySamplesPerTexel; i++)
 		color += samples[i].myColor;
 
-	color /= mySamplesPerTexel;
+	color /= static_cast<float>(mySamplesPerTexel);
 
 	color = {
 		std::pow(color[0] / 255.f, 2.2f),

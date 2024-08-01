@@ -23,3 +23,9 @@ void PolyObject::AddTri(fisk::tools::Tri<float> aTri)
 
 	myTris.push_back(aTri);
 }
+
+bool PolyObject::Process(fisk::tools::DataProcessor& aProcessor)
+{
+	return aProcessor.Process(myTris)
+		&& aProcessor.Process(myBoundingBox);
+}

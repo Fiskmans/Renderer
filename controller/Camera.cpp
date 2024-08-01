@@ -19,8 +19,8 @@ Camera::Camera(fisk::tools::V2ui aScreenSize, fisk::tools::Ray<float, 3> aAim, f
 	if (aAim.myDirection.DistanceSqr(referenceAxis) < 0.01f) // math breaks down
 		referenceAxis = { 1, 0, 0 };
 
-	myCameraRight = referenceAxis.Cross(aAim.myDirection).GetNormalized() * xscale / aScreenSize[0];
-	myCameraUp = myCameraRight.Cross(aAim.myDirection).GetNormalized() * yscale / aScreenSize[1];
+	myCameraRight = aAim.myDirection.Cross(referenceAxis).GetNormalized() * xscale / static_cast<float>(aScreenSize[0]);
+	myCameraUp = aAim.myDirection.Cross(myCameraRight).GetNormalized() * yscale / static_cast<float>(aScreenSize[1]);
 
 	myLensRight = myCameraRight.GetNormalized() * aLens.myFStop * aLens.myRadius;
 	myLensUp = myCameraUp.GetNormalized() * aLens.myFStop * aLens.myRadius;
@@ -65,6 +65,29 @@ Camera::Result Camera::Render(fisk::tools::V2ui aUV)
 	fisk::tools::Ray<float, 3> out = fisk::tools::Ray<float, 3>::FromPointandTarget(focallyDistortedSource, target);
 
 	return out;
+}
+
+std::optional<fisk::tools::V2f> Camera::GetScreenPos(fisk::tools::V3f aPoint)
+{
+	fisk::tools::Ray<float, 3> ray = fisk::tools::Ray<float, 3>::FromPointandTarget(myPosition, aPoint);
+
+	fisk::tools::Plane<float> focalPlane = fisk::tools::Plane<float>::FromPointandNormal(myFocalpoint, myLensPlane.myNormal);
+
+	std::optional<float> dist = fisk::tools::Intersect(ray, focalPlane);
+
+	if (!dist)
+		return {};
+
+	fisk::tools::V3f pointInFocalPlane = ray.PointAt(*dist);
+	fisk::tools::V3f deltaInPlane = pointInFocalPlane - myFocalpoint;
+
+	float xScale = myCameraRight.Length();
+	float yScale = myCameraUp.Length();
+
+	float x = deltaInPlane.Dot(myCameraRight) / xScale / xScale;
+	float y = deltaInPlane.Dot(myCameraUp) / yScale / yScale;
+
+	return { { (x + myScreenSize[0]) / 2, (y + myScreenSize[1])/2}};
 }
 
 fisk::tools::V3f Camera::GetPosition()

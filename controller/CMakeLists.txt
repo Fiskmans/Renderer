@@ -10,6 +10,7 @@ list(APPEND FILES RaytracerConcept.h)
 list(APPEND FILES Orchestrator.h)
 list(APPEND FILES ThreadedRenderer.h)
 list(APPEND FILES RendererTypes.h)
+list(APPEND FILES CheckeredRenderer.h)
 
 list(APPEND FILES Camera.h Camera.cpp)
 list(APPEND FILES Material.h Material.cpp)

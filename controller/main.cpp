@@ -6,6 +6,7 @@
 #include <chrono>
 
 #include "Camera.h"
+#include "CheckeredRenderer.h"
 #include "GraphicsFramework.h"
 #include "ImguiHelper.h"
 #include "Orchestrator.h"
@@ -75,8 +76,8 @@ int main(int argc, char** argv)
 
 	fisk::ImguiHelper imguiHelper(framework, window);
 
-	constexpr size_t scaleFactor = 8;
-	constexpr size_t samples = 1000;
+	constexpr size_t scaleFactor = 4;
+	constexpr size_t samples = 400;
 
 	Camera::Lens lens;
 
@@ -92,24 +93,21 @@ int main(int argc, char** argv)
 	std::unique_ptr<Scene> scene = Scene::FromFile("C:/Users/Fi/Documents/Scenes/Example.fbx");
 
 	DumbIntersector dumbIntersector(*scene);
-	ClusteredIntersector clusterIntersector(*scene);
+	ClusteredIntersector clusterIntersectorMedium(*scene, 8, 8);
+	ClusteredIntersector clusterIntersectorFine(*scene, 2, 2);
 
 
 	std::vector<RayRenderer*> baseRenderers;
 	std::vector<IAsyncRenderer<TextureType::PackedValues>*> renderers;
 
-	for (size_t i = 0; i < 4; i++)
-	{
-		RayRenderer* baseRenderer = new RayRenderer(camera, dumbIntersector, skyBox, samples, i + 1);
-		baseRenderers.push_back(baseRenderer);
-		renderers.push_back(new ThreadedRenderer<TextureType::PackedValues, 1024>(*baseRenderer));
-	}
+	RayRenderer* baseA = new RayRenderer(camera, clusterIntersectorMedium, skyBox, samples, 1);
+	baseRenderers.push_back(baseA);
 
-	for (size_t i = 0; i < 4; i++)
+	for (unsigned int i = 0; i < 6; i++)
 	{
-		RayRenderer* baseRenderer = new RayRenderer(camera, clusterIntersector, skyBox, samples, i + 1 + 100);
-		baseRenderers.push_back(baseRenderer);
-		renderers.push_back(new ThreadedRenderer<TextureType::PackedValues, 1024>(*baseRenderer));
+		ThreadedRenderer<TextureType::PackedValues, 1024>* threadA = new ThreadedRenderer<TextureType::PackedValues, 1024>(*baseA);
+
+		renderers.push_back(threadA);
 	}
 
 	TextureType texture(window.GetWindowSize() / scaleFactor, {});
@@ -119,6 +117,7 @@ int main(int argc, char** argv)
 	
 	fisk::tools::EventReg viewerImguiHandle = imguiHelper.DrawImgui.Register([&viewer](){ viewer.Imgui(); });
 	fisk::tools::EventReg diagnosticImguiHandle = imguiHelper.DrawImgui.Register([](){ Diagnostics(); });
+	fisk::tools::EventReg clusterImguiHandle = imguiHelper.DrawImgui.Register([&clusterIntersectorMedium, &window, &camera, scaleFactor]() { clusterIntersectorMedium.Imgui(window.GetWindowSize(), camera, scaleFactor); });
 
 	fisk::tools::EventReg flushHandle = framework.AfterPresent.Register([&viewer]() { viewer.DrawImage(); });
 

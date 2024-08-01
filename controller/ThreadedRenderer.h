@@ -20,7 +20,7 @@ public:
 
 	void StopThread();
 
-	bool CanRender() override;
+	bool CanRender(fisk::tools::V2ui aUV) override;
 
 	void Render(fisk::tools::V2ui aUV) override;
 	bool GetResult(Result& aOut) override;
@@ -91,7 +91,7 @@ inline void ThreadedRenderer<TexelType, QueueSize>::StopThread()
 }
 
 template<class TexelType, size_t QueueSize>
-inline bool ThreadedRenderer<TexelType, QueueSize>::CanRender()
+inline bool ThreadedRenderer<TexelType, QueueSize>::CanRender(fisk::tools::V2ui aUV)
 {
 	return myWriteHead->myState == RenderSlotState::Empty;
 }

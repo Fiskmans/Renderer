@@ -14,52 +14,80 @@ Scene::Scene()
 {
 }
 
-Scene::~Scene()
+bool Scene::Process(fisk::tools::DataProcessor& aProcessor)
 {
-	for (Material* mat : myMaterials)
-		delete mat;
+	bool success = true;
+
+	success &= aProcessor.Process(myMaterials);
+
+	success &= aProcessor.Process(myPolyObjects);
+	success &= aProcessor.Process(mySpheres);
+	success &= aProcessor.Process(myPlanes);
+	success &= aProcessor.Process(myTris);
+
+	return success;
 }
 
-void Scene::Add(const fisk::tools::Sphere<float>& aSphere, Material* aMaterial)
+void Scene::Add(const fisk::tools::Sphere<float>& aSphere, Material& aMaterial)
 {
+
 	SceneObject<fisk::tools::Sphere<float>> sceneSphere;
 
 	sceneSphere.myShape = aSphere;
 	sceneSphere.myId = ++myIdCounter;
-	sceneSphere.myMaterial = aMaterial;
+	sceneSphere.myMaterialIndex = myMaterials.size();
+
+	myMaterials.push_back(std::make_unique<Material>(aMaterial));
 
 	mySpheres.push_back(sceneSphere);
 }
 
-void Scene::Add(const fisk::tools::Plane<float>& aPlane, Material* aMaterial)
+void Scene::Add(const fisk::tools::Plane<float>& aPlane, Material& aMaterial)
 {
 	SceneObject<fisk::tools::Plane<float>> scenePlane;
 
 	scenePlane.myShape = aPlane;
 	scenePlane.myId = ++myIdCounter;
-	scenePlane.myMaterial = aMaterial;
+	scenePlane.myMaterialIndex = myMaterials.size();
+
+	myMaterials.push_back(std::make_unique<Material>(aMaterial));
 
 	myPlanes.push_back(scenePlane);
 }
 
-void Scene::Add(const fisk::tools::Tri<float>& aTri, Material* aMaterial)
+void Scene::Add(const fisk::tools::Tri<float>& aTri, Material& aMaterial)
 {
 	SceneObject<fisk::tools::Tri<float>> sceneTri;
 
 	sceneTri.myShape = aTri;
 	sceneTri.myId = ++myIdCounter;
-	sceneTri.myMaterial = aMaterial;
+	sceneTri.myMaterialIndex = myMaterials.size();
+
+	myMaterials.push_back(std::make_unique<Material>(aMaterial));
 
 	myTris.push_back(sceneTri);
 }
 
-void Scene::Add(const PolyObject& aPolyObject, Material* aMaterial)
+void Scene::Add(const PolyObject& aPolyObject, Material& aMaterial)
 {
 	SceneObject<PolyObject> scenePoly;
 
 	scenePoly.myShape = aPolyObject;
 	scenePoly.myId = ++myIdCounter;
-	scenePoly.myMaterial = aMaterial;
+	scenePoly.myMaterialIndex = myMaterials.size();
+
+	myMaterials.push_back(std::make_unique<Material>(aMaterial));
+
+	myPolyObjects.push_back(scenePoly);
+}
+
+void Scene::Add(const PolyObject& aPolyObject, size_t aMaterialIndex)
+{
+	SceneObject<PolyObject> scenePoly;
+
+	scenePoly.myShape = aPolyObject;
+	scenePoly.myId = ++myIdCounter;
+	scenePoly.myMaterialIndex = aMaterialIndex;
 
 	myPolyObjects.push_back(scenePoly);
 }
@@ -89,6 +117,11 @@ std::unique_ptr<Scene> Scene::FromFile(std::string aFilePath)
 	return out;
 }
 
+const Material* Scene::GetMaterial(size_t aMaterialIndex) const
+{
+	return myMaterials[aMaterialIndex].get();
+}
+
 void Scene::ImportMaterials(const aiScene* aScene)
 {
 	if (!aScene->HasMaterials())
@@ -97,21 +130,27 @@ void Scene::ImportMaterials(const aiScene* aScene)
 	for (size_t i = 0; i < aScene->mNumMaterials; i++)
 	{
 		const aiMaterial* aiMat = aScene->mMaterials[i];
-		Material* mat = new Material();
+		std::unique_ptr<Material> mat = std::make_unique<Material>();
 
 		LOG_INFO(aiMat->GetName().C_Str());
 
 		mat->myColor = { 0.8f, 0.8f, 0.8f };
+		mat->mySpecular = 0.5f;
 
 		aiColor3D diffuse;
 		if (aiMat->Get(AI_MATKEY_COLOR_DIFFUSE, diffuse) == AI_SUCCESS)
-		{
 			mat->myColor = { diffuse.r, diffuse.g, diffuse.b };
-		}
+		/*
 
-		mat->specular = 0.5f;
+		float metalness;
+		if (aiMat->Get(AI_MATKEY_METALLIC_FACTOR, metalness) == AI_SUCCESS)
+			mat->mySpecular = metalness;*/
 
-		myMaterials.push_back(mat);
+		float roughness;
+		if (aiMat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS)
+			mat->mySpecular = 1.f - roughness;
+
+		myMaterials.push_back(std::move(mat));
 	}
 }
 
@@ -155,13 +194,13 @@ void Scene::ImportMeshes(aiMesh*const* aMeshes, const aiNode* aNode, const aiMat
 		for (const aiFace& face : fisk::tools::RangeFromStartEnd(mesh->mFaces + 1, mesh->mFaces + mesh->mNumFaces))
 			obj.AddTri(TriFromFace(mesh->mVertices, face, aTransform));
 
-		Add(obj, myMaterials[mesh->mMaterialIndex]);
+		Add(obj, mesh->mMaterialIndex);
 	}
 }
 
 fisk::tools::Tri<float> Scene::TriFromFace(const aiVector3D* aVerticies, const aiFace& aFace, const aiMatrix4x4& aTransform)
 {
-	assert(aFace.mNumIndices == 3, "Mesh was not triangularized properly");
+	assert(aFace.mNumIndices == 3 && "Mesh was not triangularized properly");
 
 	return fisk::tools::Tri<float>::FromCorners(
 		TranslateVectorType(aTransform * aVerticies[aFace.mIndices[0]]),

@@ -26,7 +26,7 @@ std::optional<Hit> DumbIntersector::Intersect(fisk::tools::Ray<float, 3> aRay)
             out.myPosition = pos;
             out.myNormal = delta.GetNormalized();
 			out.myObjectId = sphere.myId;
-			out.myMaterial = sphere.myMaterial;
+			out.myMaterial = myScene.GetMaterial(sphere.myMaterialIndex);
         }
 	}
 
@@ -43,7 +43,7 @@ std::optional<Hit> DumbIntersector::Intersect(fisk::tools::Ray<float, 3> aRay)
 			out.myPosition = pos;
 			out.myNormal = plane.myShape.myNormal;
 			out.myObjectId = plane.myId;
-            out.myMaterial = plane.myMaterial;
+            out.myMaterial = myScene.GetMaterial(plane.myMaterialIndex);
 		}
     }
 
@@ -60,7 +60,7 @@ std::optional<Hit> DumbIntersector::Intersect(fisk::tools::Ray<float, 3> aRay)
 			out.myPosition = pos;
 			out.myNormal = tri.myShape.Normal();
 			out.myObjectId = tri.myId;
-            out.myMaterial = tri.myMaterial;
+            out.myMaterial = myScene.GetMaterial(tri.myMaterialIndex);
 		}
     }
 
@@ -77,7 +77,7 @@ std::optional<Hit> DumbIntersector::Intersect(fisk::tools::Ray<float, 3> aRay)
 
 		if (boundingHit && *boundingHit < closest)
 		{
-			for (size_t i = 0; i < poly.myShape.myTris.size(); i++)
+			for (unsigned int i = 0; i < poly.myShape.myTris.size(); i++)
 			{
 				const fisk::tools::Tri<float>& tri = poly.myShape.myTris[i];
 
@@ -97,7 +97,7 @@ std::optional<Hit> DumbIntersector::Intersect(fisk::tools::Ray<float, 3> aRay)
 				out.myNormal = tri.Normal();
 				out.myObjectId = poly.myId;
 				out.mySubObjectId = i + 1;
-				out.myMaterial = poly.myMaterial;
+				out.myMaterial = myScene.GetMaterial(poly.myMaterialIndex);
 			}
 		}
     }

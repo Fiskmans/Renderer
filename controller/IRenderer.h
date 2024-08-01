@@ -21,7 +21,7 @@ class IAsyncRenderer
 public:
 	using Result = std::pair<fisk::tools::V2ui, TexelType>;
 
-	virtual bool CanRender() = 0;
+	virtual bool CanRender(fisk::tools::V2ui aUV) = 0;
 
 	virtual void Render(fisk::tools::V2ui aUV) = 0;
 	virtual bool GetResult(Result& aOut) = 0;

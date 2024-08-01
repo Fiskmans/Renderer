@@ -5,6 +5,8 @@
 #include <unordered_map>
 #include <memory>
 
+#include "tools/Concepts.h"
+#include "tools/DataProcessor.h"
 #include "tools/Shapes.h"
 #include "Material.h"
 #include "PolyObject.h"
@@ -15,26 +17,25 @@
 template<class Shape>
 struct SceneObject
 {
-	Shape myShape;
 	unsigned int myId;
-	Material* myMaterial;
+	unsigned int myMaterialIndex;
+	Shape myShape;
+
+	bool Process(fisk::tools::DataProcessor& aProcessor);
 };
 
 class Scene
 {
 public:
 	Scene();
-	~Scene();
 
-	Scene(const Scene&) = delete;
-	Scene(Scene&&) = delete;
-	Scene& operator=(const Scene&) = delete;
-	Scene& operator=(Scene&&) = delete;
+	bool Process(fisk::tools::DataProcessor& aProcessor);
 
-	void Add(const fisk::tools::Sphere<float>& aSphere, Material* aMaterial);
-	void Add(const fisk::tools::Plane<float>& aPlane, Material* aMaterial);
-	void Add(const fisk::tools::Tri<float>& aTri, Material* aMaterial);
-	void Add(const PolyObject& aPolyObject, Material* aMaterial);
+	void Add(const fisk::tools::Sphere<float>& aSphere, Material& aMaterial);
+	void Add(const fisk::tools::Plane<float>& aPlane, Material& aMaterial);
+	void Add(const fisk::tools::Tri<float>& aTri, Material& aMaterial);
+	void Add(const PolyObject& aPolyObject, Material& aMaterial);
+	void Add(const PolyObject& aPolyObject, size_t aMaterialIndex);
 
 	std::vector<SceneObject<fisk::tools::Sphere<float>>> mySpheres;
 	std::vector<SceneObject<fisk::tools::Plane<float>>> myPlanes;
@@ -42,6 +43,8 @@ public:
 	std::vector<SceneObject<PolyObject>> myPolyObjects;
 
 	static std::unique_ptr<Scene> FromFile(std::string aFilePath);
+
+	const Material* GetMaterial(size_t aMaterialIndex) const;
 
 private:
 
@@ -55,8 +58,19 @@ private:
 
 	static fisk::tools::V3f TranslateVectorType(const aiVector3D& aVector);
 
-	std::vector<Material*> myMaterials;
+	std::vector<std::unique_ptr<Material>> myMaterials;
 
 	unsigned int myIdCounter;
 };
 
+template<class Shape>
+inline bool SceneObject<Shape>::Process(fisk::tools::DataProcessor& aProcessor)
+{
+	bool success = true;
+
+	success &= aProcessor.Process(myId);
+	success &= aProcessor.Process(myMaterialIndex);
+	success &= aProcessor.Process(myShape);
+
+	return success;
+}
