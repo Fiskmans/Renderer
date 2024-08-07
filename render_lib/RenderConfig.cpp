@@ -1,5 +1,3 @@
-#pragma once
-
 #include "RenderConfig.h"
 
 bool RenderConfig::Process(fisk::tools::DataProcessor& aProcessor)
