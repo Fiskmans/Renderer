@@ -20,13 +20,13 @@ public:
 	MultiChannelTexture(fisk::tools::V2ui aSize, const PackedValues& aInitialValues);
 
 	void SetTexel(fisk::tools::V2ui aUV, const PackedValues& aValues);
-	PackedValues GetTexel(fisk::tools::V2ui aUV);
+	PackedValues GetTexel(fisk::tools::V2ui aUV) const;
 
-	size_t GetVersion();
+	size_t GetVersion() const;
 	fisk::tools::V2ui GetSize();
 
 	template<size_t Channel>
-	const auto& Channel();
+	const auto& Channel() const;
 
 private:
 	template<size_t... IndexSequence>
@@ -36,10 +36,10 @@ private:
 	void SetTexel_Internal(size_t aIndex, const PackedValues& aValues, std::index_sequence<IndexSequence...> /*Here for TAD*/);
 
 	template<size_t... IndexSequence>
-	PackedValues GetTexel_Internal(size_t aIndex, std::index_sequence<IndexSequence...> /*Here for TAD*/);
+	PackedValues GetTexel_Internal(size_t aIndex, std::index_sequence<IndexSequence...> /*Here for TAD*/) const;
 
 
-	size_t IndexFromUV(fisk::tools::V2ui aUV);
+	size_t IndexFromUV(fisk::tools::V2ui aUV) const;
 
 	std::tuple<std::vector<ChannelTypes>...> myChannels;
 	size_t myVersion;
@@ -64,13 +64,13 @@ inline void MultiChannelTexture<ChannelTypes...>::SetTexel(fisk::tools::V2ui aUV
 }
 
 template<class ...ChannelTypes>
-inline MultiChannelTexture<ChannelTypes...>::PackedValues MultiChannelTexture<ChannelTypes...>::GetTexel(fisk::tools::V2ui aUV)
+inline MultiChannelTexture<ChannelTypes...>::PackedValues MultiChannelTexture<ChannelTypes...>::GetTexel(fisk::tools::V2ui aUV) const
 {
 	return GetTexel_Internal(IndexFromUV(aUV), std::make_index_sequence<sizeof...(ChannelTypes)>{});
 }
 
 template<class ...ChannelTypes>
-inline size_t MultiChannelTexture<ChannelTypes...>::GetVersion()
+inline size_t MultiChannelTexture<ChannelTypes...>::GetVersion() const
 {
 	return myVersion;
 }
@@ -82,14 +82,14 @@ inline fisk::tools::V2ui MultiChannelTexture<ChannelTypes...>::GetSize()
 }
 
 template<class ...ChannelTypes>
-inline size_t MultiChannelTexture<ChannelTypes...>::IndexFromUV(fisk::tools::V2ui aUV)
+inline size_t MultiChannelTexture<ChannelTypes...>::IndexFromUV(fisk::tools::V2ui aUV) const
 {
 	return aUV[0] + aUV[1] * mySize[0];
 }
 
 template<class ...ChannelTypes>
 template<size_t Channel>
-inline const auto& MultiChannelTexture<ChannelTypes...>::Channel()
+inline const auto& MultiChannelTexture<ChannelTypes...>::Channel() const
 {
 	return std::get<Channel>(myChannels);
 }
@@ -117,7 +117,7 @@ inline void MultiChannelTexture<ChannelTypes...>::SetTexel_Internal(size_t aInde
 
 template<class ...ChannelTypes>
 template<size_t ...IndexSequence>
-inline MultiChannelTexture<ChannelTypes...>::PackedValues MultiChannelTexture<ChannelTypes...>::GetTexel_Internal(size_t aIndex, std::index_sequence<IndexSequence...>)
+inline MultiChannelTexture<ChannelTypes...>::PackedValues MultiChannelTexture<ChannelTypes...>::GetTexel_Internal(size_t aIndex, std::index_sequence<IndexSequence...>) const
 {
 	return PackedValues(std::get<IndexSequence>(myChannels)[aIndex]...);
 }

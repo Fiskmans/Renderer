@@ -14,10 +14,12 @@
 class RaytracerOutputViewer
 {
 public:
-	RaytracerOutputViewer(fisk::GraphicsFramework& aFramework, TextureType& aTexture, fisk::tools::V2ui aWindowSize);
+	RaytracerOutputViewer(fisk::GraphicsFramework& aFramework, fisk::tools::V2ui aWindowSize, fisk::tools::V2ui aResolution);
 
 	void DrawImage();
 	void Imgui();
+
+	void AddTexture(const TextureType& aTexture);
 
 private:
 
@@ -44,11 +46,13 @@ private:
 	fisk::COMObject<ID3D11ShaderResourceView> myTextureView;
 	fisk::COMObject<ID3D11InputLayout> myInputLayout;
 
-	TextureType& myTextureData;
+	std::vector<const TextureType*> myTextures;
 	fisk::tools::V2ui myWindowSize;
+	fisk::tools::V2ui myResolution;
 
 	std::vector<fisk::tools::V3f> myFrameBuffer;
 	
+	int myImageSelection;
 	size_t myImageversion; 
 	
 	ConvertVectorCoroutine myTask;

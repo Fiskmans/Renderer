@@ -5,7 +5,8 @@
 #include "tools/Event.h"
 
 #define NOMINMAX
-#include <windows.h>
+#include <WinSock2.h>
+#include <Windows.h>
 
 namespace fisk
 {

@@ -4,6 +4,8 @@
 
 #include "IRenderer.h"
 
+#include <thread>
+
 template<class TexelType, size_t QueueSize>
 class ThreadedRenderer : public IAsyncRenderer<TexelType>
 {
@@ -51,10 +53,10 @@ private:
 
 	RenderJob								myJobs[QueueSize];	// Shared
 
-	fisk::tools::LoopingPointer<RenderJob>	myWriteHead;		// External thread
-	fisk::tools::LoopingPointer<RenderJob>	myReadHead;			// External thread
+	fisk::tools::LoopingPointer<RenderJob*>	myWriteHead;		// External thread
+	fisk::tools::LoopingPointer<RenderJob*>	myReadHead;			// External thread
 
-	fisk::tools::LoopingPointer<RenderJob>	myRenderHead;		// Internal thread
+	fisk::tools::LoopingPointer<RenderJob*>	myRenderHead;		// Internal thread
 
 	std::atomic<bool>						myStopRequested;	// Shared
 

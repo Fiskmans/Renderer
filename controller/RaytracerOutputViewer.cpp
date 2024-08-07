@@ -8,20 +8,21 @@
 #include <d3dcompiler.h>
 #include <random>
 
-RaytracerOutputViewer::RaytracerOutputViewer(fisk::GraphicsFramework& aFramework, TextureType& aTexture, fisk::tools::V2ui aWindowSize)
+RaytracerOutputViewer::RaytracerOutputViewer(fisk::GraphicsFramework& aFramework, fisk::tools::V2ui aWindowSize, fisk::tools::V2ui aResolution)
 	: myFramework(aFramework)
 	, myPixelShader(nullptr)
 	, myTexture(nullptr)
 	, myTextureView(nullptr)
 	, myVertexShader(nullptr)
 	, myInputLayout(nullptr)
-	, myTextureData(aTexture)
 	, myWindowSize(aWindowSize)
+	, myResolution(aResolution)
 	, myChannel(Channel::Color)
 	, myTimescale(std::chrono::microseconds(10))
+	, myImageSelection(0)
 	, myImageversion(0)
 {
-	myFrameBuffer.resize(myTextureData.GetSize()[0] * myTextureData.GetSize()[1]);
+	myFrameBuffer.resize(aResolution[0] * aResolution[1]);
 	CreateGraphicsResources();
 }
 
@@ -29,7 +30,10 @@ void RaytracerOutputViewer::DrawImage()
 {
 	fisk::tools::ScopeDiagnostic perfLock1("DrawImage");
 
-	if (myImageversion < myTextureData.GetVersion() || myTask) // slightly thread unsafe, may not realize there are new version when there is
+	if (myTextures.empty())
+		return;
+
+	if (myImageversion < myTextures[myImageSelection]->GetVersion() || myTask) // slightly thread unsafe, may not realize there are new version when there is
 		FlushImage(false);
 
 	ID3D11RenderTargetView* backBuffer = myFramework.GetBackBufferRenderTarget();
@@ -129,15 +133,15 @@ void RaytracerOutputViewer::Imgui()
 	{
 		ImVec2 mousePos = ImGui::GetMousePos();
 
-		mousePos.x *= myTextureData.GetSize()[0];
+		mousePos.x *= myResolution[0];
 		mousePos.x /= myWindowSize[0];
 
-		mousePos.y *= myTextureData.GetSize()[1];
+		mousePos.y *= myResolution[1];
 		mousePos.y /= myWindowSize[1];
 
-		if (mousePos.x > 0 && mousePos.y > 0 && mousePos.x < myTextureData.GetSize()[0] - 1 && mousePos.y < myTextureData.GetSize()[1] - 1)
+		if (mousePos.x > 0 && mousePos.y > 0 && mousePos.x < myResolution[0] - 1 && mousePos.y < myResolution[1] - 1)
 		{
-			auto [color, rawTimeSpent, objectId, subObjectId, rendererId] = myTextureData.GetTexel({static_cast<unsigned int>(mousePos.x), static_cast<unsigned int>(mousePos.y)});
+			auto [color, rawTimeSpent, objectId, subObjectId, rendererId] = myTextures[myImageSelection]->GetTexel({static_cast<unsigned int>(mousePos.x), static_cast<unsigned int>(mousePos.y)});
 
 			ImGui::Text("Color ");
 			ImGui::SameLine();
@@ -209,9 +213,22 @@ void RaytracerOutputViewer::Imgui()
 	ImGui::End();
 }
 
+void RaytracerOutputViewer::AddTexture(const TextureType& aTexture)
+{
+	myTextures.push_back(&aTexture);
+
+	if (myTextures.size() == 1)
+		FlushImage(true);
+}
+
 void RaytracerOutputViewer::FlushImage(bool aRestart)
 {
 	using namespace std::chrono_literals;
+
+	if (myTextures.empty())
+		return;
+
+	const TextureType& textureData = *myTextures[myImageSelection];
 
 	if (aRestart && myTask)
 	{
@@ -248,21 +265,21 @@ void RaytracerOutputViewer::FlushImage(bool aRestart)
 		switch (myChannel)
 		{
 		case RaytracerOutputViewer::Channel::Color:
-			myFrameBuffer = myTextureData.Channel<ColorChannel>();
+			myFrameBuffer = textureData.Channel<ColorChannel>();
 			FlushImageData(myFrameBuffer);
 			break;
 		case RaytracerOutputViewer::Channel::TimeTaken:
-			myTask = ConvertVectorsAsync(timeMutator, myFrameBuffer, 10us, myTextureData.Channel<TimeChannel>());
+			myTask = ConvertVectorsAsync(timeMutator, myFrameBuffer, 10us, textureData.Channel<TimeChannel>());
 			break;
 		case RaytracerOutputViewer::Channel::Object:
-			myTask = ConvertVectorsAsync(idMutator, myFrameBuffer, 10us, myTextureData.Channel<ObjectIdChannel>(), myTextureData.Channel<SubObjectIdChannel>());
+			myTask = ConvertVectorsAsync(idMutator, myFrameBuffer, 10us, textureData.Channel<ObjectIdChannel>(), textureData.Channel<SubObjectIdChannel>());
 			break;
 		case RaytracerOutputViewer::Channel::Renderer:
-			myTask = ConvertVectorsAsync(rendererMutator, myFrameBuffer, 10us, myTextureData.Channel<RendererChannel>());
+			myTask = ConvertVectorsAsync(rendererMutator, myFrameBuffer, 10us, textureData.Channel<RendererChannel>());
 			break;
 		}
 
-		myImageversion = myTextureData.GetVersion(); // slightly thread unsafe, may not realize there are new version when there is
+		myImageversion = textureData.GetVersion(); // slightly thread unsafe, may not realize there are new version when there is
 	}
 
 	if (!myTask)
@@ -283,7 +300,7 @@ void RaytracerOutputViewer::FlushImage(bool aRestart)
 
 void RaytracerOutputViewer::FlushImageData(const std::vector<fisk::tools::V3f>& aData)
 {
-	fisk::tools::V2ui size = myTextureData.GetSize();
+	fisk::tools::V2ui size = myResolution;
 
 	D3D11_MAPPED_SUBRESOURCE subresource;
 
@@ -451,7 +468,7 @@ VertexToPixel vertexShader(Vertex i)
 		LOG_SYS_CRASH("failed to create input layout");
 	}
 
-	fisk::tools::V2ui size = myTextureData.GetSize();
+	fisk::tools::V2ui size = myResolution;
 
 	D3D11_TEXTURE2D_DESC textureDesc;
 	textureDesc.Width = size[0];

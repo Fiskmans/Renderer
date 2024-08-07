@@ -359,7 +359,7 @@ void ClusteredIntersector::Bake(const Scene& aScene, size_t aFragmentSize, size_
 	size_t leafIndex = 0;
 	size_t nodeIndex = 0;
 
-	for (const SceneObject<PolyObject>& poly : aScene.myPolyObjects)
+	for (const SceneObject<PolyObject>& poly : aScene.GetObjects())
 	{
 		std::vector<std::unique_ptr<cluster_intersector::Leaf>> leafs;
 		std::vector<std::unique_ptr<cluster_intersector::Node>> nodes;

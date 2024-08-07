@@ -12,7 +12,15 @@ Sky::Sky(fisk::tools::V3f aSunDirection, float aSunAngleRadius, fisk::tools::V3f
 	mySkyColor = aSkyColor;
 }
 
-void Sky::BlendWith(fisk::tools::V3f& aInOutColor, fisk::tools::Ray<float, 3> aFrom)
+bool Sky::Process(fisk::tools::DataProcessor& aProcessor)
+{
+	return aProcessor.Process(mySunDirection)
+		&& aProcessor.Process(mySunEdge)
+		&& aProcessor.Process(mySunColor)
+		&& aProcessor.Process(mySkyColor);
+}
+
+void Sky::BlendWith(fisk::tools::V3f& aInOutColor, fisk::tools::Ray<float, 3> aFrom) const
 {
 	float alignment = aFrom.myDirection.Dot(mySunDirection);
 

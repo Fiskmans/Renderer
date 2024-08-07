@@ -6,16 +6,16 @@
 #include <algorithm>
 #include <chrono>
 
-RayRenderer::RayRenderer(RayCaster& aRayCaster, IIntersector& aIntersector, Sky& aSky, size_t aSamplesPerTexel, unsigned int aRendererId)
-	: myRayCaster(aRayCaster)
+RayRenderer::RayRenderer(const Scene& aScene, IIntersector& aIntersector, size_t aSamplesPerTexel, unsigned int aRendererId)
+	: myRayCaster(aScene.GetCamera())
 	, myIntersector(aIntersector)
-	, mySky(aSky)
+	, mySky(aScene.GetSky())
 	, mySamplesPerTexel(aSamplesPerTexel)
 	, myRendererId(aRendererId)
 {
 }
 
-RayRenderer::Result RayRenderer::Render(fisk::tools::V2ui aUV)
+RayRenderer::Result RayRenderer::Render(fisk::tools::V2ui aUV) const
 {
 	Result out;
 
@@ -134,7 +134,7 @@ RayRenderer::Result RayRenderer::Render(fisk::tools::V2ui aUV)
 	return out;
 }
 
-RayRenderer::Sample RayRenderer::SampleTexel(fisk::tools::V2ui aUV)
+RayRenderer::Sample RayRenderer::SampleTexel(fisk::tools::V2ui aUV) const
 {
 	Sample out;
 

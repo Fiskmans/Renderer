@@ -10,7 +10,7 @@ Include(FetchContent)
 FetchContent_Declare(
   fisk_tools
   GIT_REPOSITORY https://github.com/Fiskmans/fisk_tools.git
-  GIT_TAG        master
+  GIT_TAG        ce78ea5378cabdbdc9bb77caed455e51b725395e
 )
 
 FetchContent_Declare(
@@ -23,4 +23,9 @@ FetchContent_MakeAvailable(fisk_tools)
 FetchContent_MakeAvailable(assimp)
 
 add_subdirectory(imgui)
-add_subdirectory(controller)
+add_subdirectory(render_lib)
+add_subdirectory(render_node)
+
+if(WIN32)
+	add_subdirectory(controller)
+endif()

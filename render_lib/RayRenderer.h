@@ -2,6 +2,7 @@
 
 #include "tools/Shapes.h"
 
+#include "Scene.h"
 #include "IRenderer.h"
 #include "RendererTypes.h"
 #include "IIntersector.h"
@@ -13,9 +14,9 @@ public:
 	static constexpr size_t MaxBounces = 16;
 	using RayCaster = IRenderer<fisk::tools::Ray<float, 3>>;
 
-	RayRenderer(RayCaster& aRayCaster, IIntersector& aIntersector, Sky& aSky, size_t aSamplesPerTexel, unsigned int aRendererId);
+	RayRenderer(const Scene& aScene, IIntersector& aIntersector, size_t aSamplesPerTexel, unsigned int aRendererId);
 
-	Result Render(fisk::tools::V2ui aUV) override;
+	Result Render(fisk::tools::V2ui aUV) const override;
 
 private:
 
@@ -26,11 +27,11 @@ private:
 		unsigned int mySubObjectId = 0;
 	};
 
-	Sample SampleTexel(fisk::tools::V2ui aUV);
+	Sample SampleTexel(fisk::tools::V2ui aUV) const;
 
-	RayCaster& myRayCaster;
+	const RayCaster& myRayCaster;
 	IIntersector& myIntersector;
-	Sky& mySky;
+	const Sky& mySky;
 	size_t mySamplesPerTexel;
 	unsigned int myRendererId;
 };

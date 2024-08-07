@@ -10,7 +10,7 @@ class IRenderer
 public:
 	using Result = TexelType;
 
-	virtual Result Render(fisk::tools::V2ui aUV) = 0;
+	virtual Result Render(fisk::tools::V2ui aUV) const = 0;
 
 	virtual void Update() { }
 };

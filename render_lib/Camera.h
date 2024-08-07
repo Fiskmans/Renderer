@@ -1,8 +1,8 @@
 #pragma once
 
 
+#include "tools/DataProcessor.h"
 #include "tools/MathVector.h"
-
 #include "tools/Shapes.h"
 
 #include "IRenderer.h"
@@ -21,9 +21,11 @@ public:
 		float myFStop;
 	};
 
+	Camera() = default;
+
 	Camera(fisk::tools::V2ui aScreenSize, fisk::tools::Ray<float, 3> aAim, float aXFov, Lens aLens);
 
-	Result Render(fisk::tools::V2ui aUV);
+	Result Render(fisk::tools::V2ui aUV) const;
 
 	std::optional<fisk::tools::V2f> GetScreenPos(fisk::tools::V3f aPoint);
 
@@ -31,6 +33,8 @@ public:
 	fisk::tools::V3f GetFocalpoint();
 	fisk::tools::V3f GetCameraRight();
 	fisk::tools::V3f GetCameraUp();
+
+	bool Process(fisk::tools::DataProcessor& aProcessor);
 
 private:
 	fisk::tools::V2ui myScreenSize;

@@ -1,9 +1,5 @@
 
 
-#include <windows.h>
-#include <d3d11.h>
-#include <thread>
-#include <chrono>
 
 #include "Camera.h"
 #include "CheckeredRenderer.h"
@@ -17,25 +13,21 @@
 #include "Window.h"
 #include "intersectors/DumbIntersector.h"
 #include "intersectors/ClusteredIntersector.h"
+#include "Protocol.h"
+
+#include "NetworkedRenderer.h"
+#include "RenderClient.h"
+#include "RenderConfig.h"
 
 #include "tools/Logger.h"
 
 #include "imgui/imgui.h"
 
-float operator ""_m(unsigned long long aValue)
-{
-	return static_cast<float>(aValue);
-}
+#include <iostream>
+#include <d3d11.h>
+#include <thread>
+#include <chrono>
 
-float operator ""_cm(unsigned long long aValue)
-{
-	return aValue / 100.f;
-}
-
-float operator ""_deg(unsigned long long aValue)
-{
-	return aValue * 0.0174532f;
-}
 
 void DiagnosticNode(fisk::tools::TimeTree* aTree)
 {
@@ -79,26 +71,60 @@ int main(int argc, char** argv)
 	constexpr size_t scaleFactor = 4;
 	constexpr size_t samples = 400;
 
-	Camera::Lens lens;
+	RenderConfig config;
 
-	lens.myFocalLength = 20_m;
-	lens.myDistance = 5_cm;
-	lens.myRadius = 5_cm;
-	lens.myFStop = 1/1.f;
+	config.myMode = RenderConfig::RaytracedClustered;
+	config.myRenderId = 1;
+	config.mySamplesPerTexel = samples;
 
-	Camera camera(window.GetWindowSize() / scaleFactor, fisk::tools::Ray<float, 3>::FromPointandTarget({ 2_m, 6_m, 8_m }, { 0_m, 0_m, 0_m}), 100_deg, lens);
+	RenderClient client(config, window.GetWindowSize() / scaleFactor, "C:/Users/Fi/Documents/Scenes/Example.fbx", std::make_shared<fisk::tools::TCPSocket>("104.154.30.17", "12345", 5s));
 
-	Sky skyBox({ 1, 1, 1 }, 23_deg, { 1462.436f, 1049.146f, 303.80522f }, { 178.5f, 229.5f, 255.f });
+	std::vector<IAsyncRenderer<TextureType::PackedValues>*> renderers;
+	std::optional<Orchestrator<TextureType>> orcherstrator;
 
-	std::unique_ptr<Scene> scene = Scene::FromFile("C:/Users/Fi/Documents/Scenes/Example.fbx");
+	RaytracerOutputViewer viewer(framework, window.GetWindowSize(), window.GetWindowSize() / scaleFactor);
 
+	viewer.AddTexture(client.GetTexture());
+
+	fisk::tools::EventReg viewerImguiHandle = imguiHelper.DrawImgui.Register([&viewer]()
+	{
+		viewer.Imgui();
+	});
+	fisk::tools::EventReg diagnosticImguiHandle = imguiHelper.DrawImgui.Register([]()
+	{
+		Diagnostics();
+	});
+	
+	/*
+	fisk::tools::EventReg clusterImguiHandle = imguiHelper.DrawImgui.Register([&clusterIntersectorMedium, &window, &camera, scaleFactor]()
+	{
+		clusterIntersectorMedium.Imgui(window.GetWindowSize(), camera, scaleFactor);
+	});*/
+
+	fisk::tools::EventReg flushHandle = framework.AfterPresent.Register([&viewer]()
+	{
+		viewer.DrawImage();
+	});
+
+	while (window.ProcessEvents())
+	{
+		client.Update();
+
+		fisk::tools::ScopeDiagnostic perfLock2("main Update");
+
+		if(orcherstrator)
+			orcherstrator->Update(); // TODO: finish/save when done
+
+		framework.Present(fisk::GraphicsFramework::VSyncState::Immediate);
+	}
+
+	/*
 	DumbIntersector dumbIntersector(*scene);
 	ClusteredIntersector clusterIntersectorMedium(*scene, 8, 8);
 	ClusteredIntersector clusterIntersectorFine(*scene, 2, 2);
 
 
 	std::vector<RayRenderer*> baseRenderers;
-	std::vector<IAsyncRenderer<TextureType::PackedValues>*> renderers;
 
 	RayRenderer* baseA = new RayRenderer(camera, clusterIntersectorMedium, skyBox, samples, 1);
 	baseRenderers.push_back(baseA);
@@ -109,28 +135,5 @@ int main(int argc, char** argv)
 
 		renderers.push_back(threadA);
 	}
-
-	TextureType texture(window.GetWindowSize() / scaleFactor, {});
-	Orchestrator<TextureType> orcherstrator(texture, renderers);
-
-	RaytracerOutputViewer viewer(framework, texture, window.GetWindowSize());
-	
-	fisk::tools::EventReg viewerImguiHandle = imguiHelper.DrawImgui.Register([&viewer](){ viewer.Imgui(); });
-	fisk::tools::EventReg diagnosticImguiHandle = imguiHelper.DrawImgui.Register([](){ Diagnostics(); });
-	fisk::tools::EventReg clusterImguiHandle = imguiHelper.DrawImgui.Register([&clusterIntersectorMedium, &window, &camera, scaleFactor]() { clusterIntersectorMedium.Imgui(window.GetWindowSize(), camera, scaleFactor); });
-
-	fisk::tools::EventReg flushHandle = framework.AfterPresent.Register([&viewer]() { viewer.DrawImage(); });
-
-
-
-
-	while (window.ProcessEvents())
-	{
-
-		fisk::tools::ScopeDiagnostic perfLock2("main Update");
-
-		orcherstrator.Update(); // TODO: finish/save when done
-
-		framework.Present(fisk::GraphicsFramework::VSyncState::Immediate);
-	}
+	*/
 }

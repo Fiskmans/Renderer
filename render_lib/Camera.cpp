@@ -22,8 +22,8 @@ Camera::Camera(fisk::tools::V2ui aScreenSize, fisk::tools::Ray<float, 3> aAim, f
 	myCameraRight = aAim.myDirection.Cross(referenceAxis).GetNormalized() * xscale / static_cast<float>(aScreenSize[0]);
 	myCameraUp = aAim.myDirection.Cross(myCameraRight).GetNormalized() * yscale / static_cast<float>(aScreenSize[1]);
 
-	myLensRight = myCameraRight.GetNormalized() * aLens.myFStop * aLens.myRadius;
-	myLensUp = myCameraUp.GetNormalized() * aLens.myFStop * aLens.myRadius;
+	myLensRight = myCameraRight.GetNormalized() * aLens.myRadius / aLens.myFStop;
+	myLensUp = myCameraUp.GetNormalized() * aLens.myRadius / aLens.myFStop;
 }
 
 /*
@@ -40,7 +40,7 @@ fisk::tools::V2f Raytracer::NormalizedUV(fisk::tools::V2ui aUV)
 }
 */
 
-Camera::Result Camera::Render(fisk::tools::V2ui aUV)
+Camera::Result Camera::Render(fisk::tools::V2ui aUV) const
 {
 	thread_local std::random_device seed;
 	thread_local std::mt19937 rng(seed());
@@ -108,4 +108,16 @@ fisk::tools::V3f Camera::GetCameraRight()
 fisk::tools::V3f Camera::GetCameraUp()
 {
 	return myCameraUp;
+}
+
+bool Camera::Process(fisk::tools::DataProcessor& aProcessor)
+{
+	return aProcessor.Process(myScreenSize)
+		&& aProcessor.Process(myLensPlane)
+		&& aProcessor.Process(myPosition)
+		&& aProcessor.Process(myFocalpoint)
+		&& aProcessor.Process(myCameraRight)
+		&& aProcessor.Process(myCameraUp)
+		&& aProcessor.Process(myLensRight)
+		&& aProcessor.Process(myLensUp);
 }
