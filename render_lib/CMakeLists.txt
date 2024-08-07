@@ -40,7 +40,7 @@ list(APPEND FILES Protocol.h Protocol.cpp)
 list(APPEND FILES IIntersector.h)
 list(APPEND FILES intersectors/DumbIntersector.h intersectors/DumbIntersector.cpp)
 list(APPEND FILES intersectors/ClusteredIntersector.h intersectors/ClusteredIntersector.cpp)
-list(APPEND FILES ${CMAKE_BINARY_DIR}/Version.h ${CMAKE_BINARY_DIR}/Version.cpp)
+list(APPEND FILES ${CMAKE_CURRENT_BINARY_DIR}/Version.h ${CMAKE_CURRENT_BINARY_DIR}/Version.cpp)
 
 
 add_library(render_lib ${FILES})
