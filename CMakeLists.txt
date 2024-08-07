@@ -12,7 +12,7 @@ Include(FetchContent)
 FetchContent_Declare(
   fisk_tools
   GIT_REPOSITORY https://github.com/Fiskmans/fisk_tools.git
-  GIT_TAG        ce78ea5378cabdbdc9bb77caed455e51b725395e
+  GIT_TAG        26845d9086685a5cde445c8ec0e8fce5a86a317a
 )
 
 FetchContent_Declare(

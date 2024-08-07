@@ -77,7 +77,7 @@ int main(int argc, char** argv)
 	config.myRenderId = 1;
 	config.mySamplesPerTexel = samples;
 
-	RenderClient client(config, window.GetWindowSize() / scaleFactor, "C:/Users/Fi/Documents/Scenes/Example.fbx", std::make_shared<fisk::tools::TCPSocket>("104.154.30.17", "12345", 5s));
+	RenderClient client(config, window.GetWindowSize() / scaleFactor, "C:/Users/Fi/Documents/Scenes/Example.fbx", std::make_shared<fisk::tools::TCPSocket>("104.154.30.17", "11587", 5s));
 
 	std::vector<IAsyncRenderer<TextureType::PackedValues>*> renderers;
 	std::optional<Orchestrator<TextureType>> orcherstrator;
