@@ -3,9 +3,7 @@ cmake_minimum_required(VERSION 3.8.0)
 project(Renderer)
 
 set(CMAKE_CXX_STANDARD 20)
-if (WIN32)
-	set(BUILD_SHARED_LIBS OFF)
-endif()
+set(BUILD_SHARED_LIBS OFF)
 
 Include(FetchContent)
 

@@ -4,6 +4,7 @@
 
 #include "IRenderer.h"
 
+#include <atomic>
 #include <thread>
 
 template<class TexelType, size_t QueueSize>
@@ -140,7 +141,7 @@ inline size_t ThreadedRenderer<TexelType, QueueSize>::GetPending()
 template<class TexelType, size_t QueueSize>
 inline void ThreadedRenderer<TexelType, QueueSize>::Run()
 {
-	while (!myStopRequested.load(std::memory_order::memory_order_acquire))
+	while (!myStopRequested)
 	{
 		if (myRenderHead->myState != RenderSlotState::Working)
 		{
