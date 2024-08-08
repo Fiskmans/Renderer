@@ -19,7 +19,7 @@
 
 int main()
 {
-	fisk::tools::TCPListenSocket listen(12345);
+	fisk::tools::TCPListenSocket listen(11587);
 
 	std::vector<std::unique_ptr<RenderServer>> connections;
 
