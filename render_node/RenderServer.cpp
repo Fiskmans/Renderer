@@ -92,14 +92,19 @@ void RenderServer::StepSendSystemValues()
 
 void RenderServer::StepValidateSystemValues()
 {
+	fisk::tools::SystemValues local;
 	fisk::tools::SystemValues remote;
 
 	if (!myReader.ProcessAndCommit(remote))
 		return;
 
-	if (remote != fisk::tools::SystemValues{})
+	fisk::tools::SystemValues::Difference differences = local.Differences(remote);
+
+	if (differences)
 	{
 		Fail("System values do not match");
+		std::cout << differences.ToString() << "\n";
+
 		return;
 	}
 

@@ -78,14 +78,20 @@ namespace fisk::tools
 
 		ProtocolStepResult ValidateSystemValues::operator()(IProtocolPayload& aPayload, fisk::tools::TCPSocket& aSocket) const
 		{
+			SystemValues localValues;
 			SystemValues remoteValues;
 
 			StreamReader reader(aSocket.GetReadStream());
 			if (!reader.ProcessAndCommit(remoteValues))
 				return ProtocolStepResult::Stay;
 
-			if (remoteValues != SystemValues())
+			SystemValues::Difference differences = localValues.Differences(remoteValues);
+
+			if (!differences)
+			{
+				std::cout << differences.ToString();
 				return ProtocolStepResult::Abort;
+			}
 
 			return ProtocolStepResult::Next;
 		}
