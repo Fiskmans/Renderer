@@ -27,42 +27,94 @@
 #include <d3d11.h>
 #include <thread>
 #include <chrono>
+#include <concepts>
 
+namespace imgui_utils
+{
+	template<class NodeType, class DrawingFunction, class ChildGetter>
+		requires 
+		requires(NodeType& node, DrawingFunction&& drawing, ChildGetter&& childGetter)
+		{
+			{ drawing(node) };
+			{ *std::begin(childGetter(node)) } -> std::convertible_to<NodeType&>;
+		}
+	ImVec2 Tree(NodeType& aNode, DrawingFunction&& aDrawingFunction, ChildGetter&& aChildGetter)
+	{
+		ImVec2 anchor;
+		ImVec2 treeRoot;
+
+		{
+
+			ImVec2 start = ImGui::GetCursorScreenPos();
+			ImGui::BeginChild("node", { 0, 0 }, ImGuiChildFlags_AutoResizeY);
+
+			aDrawingFunction(aNode);
+
+			ImGui::EndChild();
+			ImVec2 end = ImGui::GetCursorScreenPos();
+
+			anchor = {
+				start.x,
+				(start.y + end.y) / 2.f
+			};
+
+			treeRoot = {
+				end.x + 5.f,
+				end.y
+			};
+		}
+
+		ImGui::Indent(15.f);
+		std::vector<ImVec2> anchors;
+		for (NodeType& child : aChildGetter(aNode))
+		{
+			ImGui::PushID(static_cast<int>(anchors.size()));
+
+			anchors.push_back(Tree(child, aDrawingFunction, aChildGetter));
+
+			ImGui::PopID();
+		}
+		ImGui::Unindent(15.f);
+
+		ImDrawList* drawlist = ImGui::GetWindowDrawList();
+
+		ImColor color = ImGui::GetStyle().Colors[ImGuiCol_Border];
+		
+		for (ImVec2& anchor : anchors)
+		{
+			ImVec2 next = {
+				treeRoot.x,
+				anchor.y
+			};
+
+			drawlist->AddLine(treeRoot, next, color);
+			drawlist->AddLine(next, anchor, color);
+
+			treeRoot = next;
+		}
+
+		return anchor;
+	}
+}
 
 void DiagnosticNode(const fisk::tools::Trace& aTrace)
 {
-	ImGui::TableNextRow();
+	ImGui::Text("%s [%zu]", aTrace.myTag.c_str(), aTrace.myTimesTraced);
 
-	ImGui::TableNextColumn();
-	ImGui::Text("%s", aTrace.myTag.c_str());
-
-	ImGui::TableNextColumn();
-	ImGui::Text("%zu", aTrace.myTimesTraced);
-
-	ImGui::TableNextColumn();
+	ImGui::SameLine();
 	ImGui::Text("%.3fs", std::chrono::duration_cast<std::chrono::duration<float>>(aTrace.myTimeSpent).count());
-
-	for (const fisk::tools::Trace& child : aTrace.myChildren)
-		DiagnosticNode(child);
 }
 
 void Diagnostics()
 {
 	ImGui::Begin("Diagnostics");
 	
-	if (ImGui::BeginTable("diag_table", 4))
+	for (const fisk::tools::Trace& trace : fisk::tools::PerformanceTracer::GetRoots())
 	{
-		ImGui::TableSetupColumn("Name");
-		ImGui::TableSetupColumn("Calls");
-		ImGui::TableSetupColumn("Time");
-		ImGui::TableHeadersRow();
-
-		for (const fisk::tools::Trace& trace : fisk::tools::PerformanceTracer::GetRoots())
+		imgui_utils::Tree(trace, DiagnosticNode, [](const fisk::tools::Trace& aTrace)
 		{
-			DiagnosticNode(trace);
-		}
-
-		ImGui::EndTable();
+			return aTrace.myChildren;
+		});
 	}
 
 	ImGui::ShowDemoWindow();

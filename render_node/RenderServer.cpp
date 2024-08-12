@@ -100,7 +100,8 @@ void RenderServer::StepValidateSystemValues()
 
 	fisk::tools::SystemValues::Difference differences = local.Differences(remote);
 
-	if (differences)
+	if (differences.Contains("float")
+		|| differences.Contains("double"))
 	{
 		Fail("System values do not match");
 		std::cout << differences.ToString() << "\n";
