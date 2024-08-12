@@ -3,7 +3,7 @@
 
 #include <comdef.h>
 
-#include "tools/Time.h"
+#include "tools/Trace.h"
 
 namespace fisk
 {
@@ -68,18 +68,18 @@ namespace fisk
 
 	void GraphicsFramework::Present(VSyncState aVSync)
 	{
-		fisk::tools::ScopeDiagnostic perfLock("Present");
+		FISK_TRACE("Present");
 
 
 		assert(mySwapChain);
 	
 		{
-			fisk::tools::ScopeDiagnostic perfLock1("Present pre events");
+			FISK_TRACE("Present pre events");
 			BeforePresent.Fire();
 		}
 
 		{
-			fisk::tools::ScopeDiagnostic perfLock("Present libcall");
+			FISK_TRACE("Present libcall");
 			switch (aVSync)
 			{
 			case VSyncState::Immediate:
@@ -94,7 +94,7 @@ namespace fisk
 		}
 
 		{
-			fisk::tools::ScopeDiagnostic perfLock1("Present post events");
+			FISK_TRACE("Present post events");
 			AfterPresent.Fire();
 		}
 	}

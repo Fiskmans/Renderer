@@ -3,7 +3,7 @@
 
 
 #include "imgui/imgui.h"
-#include "tools/Time.h"
+#include "tools/Trace.h"
 
 #include <d3dcompiler.h>
 #include <random>
@@ -28,7 +28,7 @@ RaytracerOutputViewer::RaytracerOutputViewer(fisk::GraphicsFramework& aFramework
 
 void RaytracerOutputViewer::DrawImage()
 {
-	fisk::tools::ScopeDiagnostic perfLock1("DrawImage");
+	FISK_TRACE("DrawImage");
 
 	if (myTextures.empty())
 		return;
@@ -63,7 +63,7 @@ void RaytracerOutputViewer::DrawImage()
 
 void RaytracerOutputViewer::Imgui()
 {
-	fisk::tools::ScopeDiagnostic perfLock1("Viewer Imgui");
+	FISK_TRACE("Viewer Imgui");
 
 	using namespace std::chrono_literals;
 
@@ -306,9 +306,22 @@ void RaytracerOutputViewer::FlushImageData(const std::vector<fisk::tools::V3f>& 
 
 	myFramework.Context().Raw().Map(myTexture, 0, D3D11_MAP_WRITE_DISCARD, 0, &subresource);
 
-	assert(subresource.RowPitch == size[0] * sizeof(aData[0]));
+	if (subresource.RowPitch == size[0] * sizeof(aData[0]))
+	{
+		::memcpy(subresource.pData, aData.data(), size[0] * size[1] * sizeof(aData[0]));
+	}
+	else
+	{
+		for (size_t y = 0; y < size[1]; y++)
+		{
+			::memcpy(
+				static_cast<std::byte*>(subresource.pData) + subresource.RowPitch * y, 
+				aData.data() + size[0] * y, 
+				size[0] * sizeof(aData[0]));
+		}
+	}
 
-	::memcpy(subresource.pData, aData.data(), size[0] * size[1] * sizeof(aData[0]));
+
 
 	myFramework.Context().Raw().Unmap(myTexture, 0);
 }

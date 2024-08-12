@@ -29,23 +29,43 @@
 #include <chrono>
 
 
-void DiagnosticNode(fisk::tools::TimeTree* aTree)
+void DiagnosticNode(const fisk::tools::Trace& aTrace)
 {
-	ImGui::Text("%s [%llu] %.3fs %2.1f%%", aTree->myName, aTree->myCallCount, aTree->myTime, aTree->myCovarage * 100.f);
-	ImGui::Indent();
+	ImGui::TableNextRow();
 
-	for (fisk::tools::TimeTree* child : aTree->myChildren)
+	ImGui::TableNextColumn();
+	ImGui::Text("%s", aTrace.myTag.c_str());
+
+	ImGui::TableNextColumn();
+	ImGui::Text("%zu", aTrace.myTimesTraced);
+
+	ImGui::TableNextColumn();
+	ImGui::Text("%.3fs", std::chrono::duration_cast<std::chrono::duration<float>>(aTrace.myTimeSpent).count());
+
+	for (const fisk::tools::Trace& child : aTrace.myChildren)
 		DiagnosticNode(child);
-	
-	ImGui::Unindent();
 }
 
 void Diagnostics()
 {
 	ImGui::Begin("Diagnostics");
+	
+	if (ImGui::BeginTable("diag_table", 4))
+	{
+		ImGui::TableSetupColumn("Name");
+		ImGui::TableSetupColumn("Calls");
+		ImGui::TableSetupColumn("Time");
+		ImGui::TableHeadersRow();
 
-	DiagnosticNode(fisk::tools::GetTimeTreeRoot());
+		for (const fisk::tools::Trace& trace : fisk::tools::PerformanceTracer::GetRoots())
+		{
+			DiagnosticNode(trace);
+		}
 
+		ImGui::EndTable();
+	}
+
+	ImGui::ShowDemoWindow();
 	ImGui::End();
 }
 
@@ -53,7 +73,6 @@ int main(int argc, char** argv)
 {
 	using namespace std::chrono_literals;
 
-	fisk::tools::ScopeDiagnostic perfLock1("main");
 
 	fisk::tools::SetFilter(fisk::tools::All);
 	
@@ -77,63 +96,28 @@ int main(int argc, char** argv)
 	config.myRenderId = 1;
 	config.mySamplesPerTexel = samples;
 
-	RenderClient client(config, window.GetWindowSize() / scaleFactor, "C:/Users/Fi/Documents/Scenes/Example.fbx", std::make_shared<fisk::tools::TCPSocket>("104.154.30.17", "11587", 5s));
+	std::string scene = "../../scenes/Example.fbx";
 
-	std::vector<IAsyncRenderer<TextureType::PackedValues>*> renderers;
-	std::optional<Orchestrator<TextureType>> orcherstrator;
+	RenderClient client(config, window.GetWindowSize() / scaleFactor, scene, std::make_shared<fisk::tools::TCPSocket>("104.154.30.17", "11587", 5s));
+
 
 	RaytracerOutputViewer viewer(framework, window.GetWindowSize(), window.GetWindowSize() / scaleFactor);
 
 	viewer.AddTexture(client.GetTexture());
 
-	fisk::tools::EventReg viewerImguiHandle = imguiHelper.DrawImgui.Register([&viewer]()
-	{
-		viewer.Imgui();
-	});
-	fisk::tools::EventReg diagnosticImguiHandle = imguiHelper.DrawImgui.Register([]()
-	{
-		Diagnostics();
-	});
-	
-	/*
-	fisk::tools::EventReg clusterImguiHandle = imguiHelper.DrawImgui.Register([&clusterIntersectorMedium, &window, &camera, scaleFactor]()
-	{
-		clusterIntersectorMedium.Imgui(window.GetWindowSize(), camera, scaleFactor);
-	});*/
+	fisk::tools::EventReg viewerImguiHandle = imguiHelper.DrawImgui.Register([&viewer]() { viewer.Imgui(); });
+	fisk::tools::EventReg diagnosticImguiHandle = imguiHelper.DrawImgui.Register([]() { Diagnostics(); });
+	fisk::tools::EventReg flushHandle = framework.AfterPresent.Register([&viewer]() { viewer.DrawImage(); });
 
-	fisk::tools::EventReg flushHandle = framework.AfterPresent.Register([&viewer]()
+	while (true)
 	{
-		viewer.DrawImage();
-	});
+		FISK_TRACE("main loop");
 
-	while (window.ProcessEvents())
-	{
+		if (!window.ProcessEvents())
+			break;
+
 		client.Update();
-
-		fisk::tools::ScopeDiagnostic perfLock2("main Update");
-
-		if(orcherstrator)
-			orcherstrator->Update(); // TODO: finish/save when done
 
 		framework.Present(fisk::GraphicsFramework::VSyncState::Immediate);
 	}
-
-	/*
-	DumbIntersector dumbIntersector(*scene);
-	ClusteredIntersector clusterIntersectorMedium(*scene, 8, 8);
-	ClusteredIntersector clusterIntersectorFine(*scene, 2, 2);
-
-
-	std::vector<RayRenderer*> baseRenderers;
-
-	RayRenderer* baseA = new RayRenderer(camera, clusterIntersectorMedium, skyBox, samples, 1);
-	baseRenderers.push_back(baseA);
-
-	for (unsigned int i = 0; i < 6; i++)
-	{
-		ThreadedRenderer<TextureType::PackedValues, 1024>* threadA = new ThreadedRenderer<TextureType::PackedValues, 1024>(*baseA);
-
-		renderers.push_back(threadA);
-	}
-	*/
 }

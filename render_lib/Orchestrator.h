@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tools/MathVector.h"
-#include "tools/Time.h"
+#include "tools/Trace.h"
 
 #include "MultichannelTexture.h"
 
@@ -38,10 +38,10 @@ inline Orchestrator<TextureType>::Orchestrator(TextureType& aTexture, IAsyncRend
 template<class TextureType>
 inline bool Orchestrator<TextureType>::Update()
 {
-	fisk::tools::ScopeDiagnostic perfLock("update");
+	FISK_TRACE("update");
 	if (!myGenerator.Done())
 	{
-		fisk::tools::ScopeDiagnostic perfLock("scheduling");
+		FISK_TRACE("scheduling");
 
 		while (myRenderer.CanRender(myGenerator.Get()))
 		{
@@ -53,7 +53,7 @@ inline bool Orchestrator<TextureType>::Update()
 	}
 
 	{
-		fisk::tools::ScopeDiagnostic perfLock("merging");
+		FISK_TRACE("merging");
 
 		typename IAsyncRenderer<TexelType>::Result result;
 		while (myRenderer.GetResult(result))
